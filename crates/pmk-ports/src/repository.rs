@@ -488,8 +488,13 @@ pub struct Media {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaOwner {
-    Diary { entry: DiaryEntryId, note: Option<DiaryNoteId> },
-    Job { job: JobId },
+    Diary {
+        entry: DiaryEntryId,
+        note: Option<DiaryNoteId>,
+    },
+    Job {
+        job: JobId,
+    },
 }
 
 /// What the API records once an upload is confirmed present in storage.
@@ -515,8 +520,12 @@ pub trait MediaRepository: Send + Sync {
 
     async fn list_for_job(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<Media>>;
 
-    async fn find(&self, scope: TenantScope, id: MediaId, job_media: bool)
-        -> PortResult<Option<Media>>;
+    async fn find(
+        &self,
+        scope: TenantScope,
+        id: MediaId,
+        job_media: bool,
+    ) -> PortResult<Option<Media>>;
 
     async fn record(&self, scope: TenantScope, rec: &MediaRecord) -> PortResult<Media>;
 

@@ -77,18 +77,66 @@ impl MediaKind {
 /// Anything absent is rejected outright: the map doubles as the allowlist, so
 /// adding a type is a deliberate edit here rather than an accident elsewhere.
 pub const ACCEPTED: &[MediaKind] = &[
-    MediaKind { mime: "image/jpeg", extension: "jpg", file_type: FileType::Photo },
-    MediaKind { mime: "image/jpg", extension: "jpg", file_type: FileType::Photo },
-    MediaKind { mime: "image/png", extension: "png", file_type: FileType::Photo },
-    MediaKind { mime: "image/gif", extension: "gif", file_type: FileType::Photo },
-    MediaKind { mime: "image/webp", extension: "webp", file_type: FileType::Photo },
-    MediaKind { mime: "image/heic", extension: "heic", file_type: FileType::Photo },
-    MediaKind { mime: "image/heif", extension: "heif", file_type: FileType::Photo },
-    MediaKind { mime: "video/mp4", extension: "mp4", file_type: FileType::Video },
-    MediaKind { mime: "video/quicktime", extension: "mov", file_type: FileType::Video },
-    MediaKind { mime: "video/webm", extension: "webm", file_type: FileType::Video },
-    MediaKind { mime: "video/x-msvideo", extension: "avi", file_type: FileType::Video },
-    MediaKind { mime: "video/avi", extension: "avi", file_type: FileType::Video },
+    MediaKind {
+        mime: "image/jpeg",
+        extension: "jpg",
+        file_type: FileType::Photo,
+    },
+    MediaKind {
+        mime: "image/jpg",
+        extension: "jpg",
+        file_type: FileType::Photo,
+    },
+    MediaKind {
+        mime: "image/png",
+        extension: "png",
+        file_type: FileType::Photo,
+    },
+    MediaKind {
+        mime: "image/gif",
+        extension: "gif",
+        file_type: FileType::Photo,
+    },
+    MediaKind {
+        mime: "image/webp",
+        extension: "webp",
+        file_type: FileType::Photo,
+    },
+    MediaKind {
+        mime: "image/heic",
+        extension: "heic",
+        file_type: FileType::Photo,
+    },
+    MediaKind {
+        mime: "image/heif",
+        extension: "heif",
+        file_type: FileType::Photo,
+    },
+    MediaKind {
+        mime: "video/mp4",
+        extension: "mp4",
+        file_type: FileType::Video,
+    },
+    MediaKind {
+        mime: "video/quicktime",
+        extension: "mov",
+        file_type: FileType::Video,
+    },
+    MediaKind {
+        mime: "video/webm",
+        extension: "webm",
+        file_type: FileType::Video,
+    },
+    MediaKind {
+        mime: "video/x-msvideo",
+        extension: "avi",
+        file_type: FileType::Video,
+    },
+    MediaKind {
+        mime: "video/avi",
+        extension: "avi",
+        file_type: FileType::Video,
+    },
 ];
 
 #[must_use]
@@ -141,7 +189,8 @@ pub fn signature_matches(mime: &str, head: &[u8]) -> bool {
         }
         // ISO base media: "ftyp" at offset 4, then a HEIF-family brand.
         "image/heic" | "image/heif" => {
-            is_iso_base_media(head) && matches!(iso_brand(head), Some(brand) if is_heif_brand(brand))
+            is_iso_base_media(head)
+                && matches!(iso_brand(head), Some(brand) if is_heif_brand(brand))
         }
         // Same "ftyp" box. The legacy code did not check the brand for video,
         // and neither does this -- narrowing it would reject files that upload
@@ -242,7 +291,10 @@ pub fn validate_upload(req: &UploadRequest) -> DomainResult<ValidatedUpload> {
 /// Checks a batch against the per-request file count.
 pub fn validate_batch_size(count: usize, limit: usize) -> DomainResult<()> {
     if count == 0 {
-        return Err(DomainError::invalid("files", "at least one file is required"));
+        return Err(DomainError::invalid(
+            "files",
+            "at least one file is required",
+        ));
     }
     if count > limit {
         return Err(DomainError::invalid(
@@ -299,9 +351,18 @@ mod tests {
     #[test]
     fn every_legacy_mime_type_is_still_accepted() {
         for mime in [
-            "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp",
-            "image/heic", "image/heif", "video/mp4", "video/quicktime",
-            "video/webm", "video/x-msvideo", "video/avi",
+            "image/jpeg",
+            "image/jpg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/heic",
+            "image/heif",
+            "video/mp4",
+            "video/quicktime",
+            "video/webm",
+            "video/x-msvideo",
+            "video/avi",
         ] {
             assert!(kind_for(mime).is_some(), "{mime} should be accepted");
         }
@@ -436,14 +497,23 @@ mod tests {
         assert!(signature_matches("image/jpeg", &jpeg()));
         assert!(signature_matches("image/jpg", &jpeg()));
         assert!(signature_matches("image/png", &png()));
-        assert!(signature_matches("image/gif", b"GIF89a\0\0\0\0\0\0\0\0\0\0"));
-        assert!(signature_matches("image/gif", b"GIF87a\0\0\0\0\0\0\0\0\0\0"));
+        assert!(signature_matches(
+            "image/gif",
+            b"GIF89a\0\0\0\0\0\0\0\0\0\0"
+        ));
+        assert!(signature_matches(
+            "image/gif",
+            b"GIF87a\0\0\0\0\0\0\0\0\0\0"
+        ));
         assert!(signature_matches("image/webp", &riff(b"WEBP")));
         assert!(signature_matches("video/x-msvideo", &riff(b"AVI ")));
         assert!(signature_matches("video/avi", &riff(b"AVI ")));
         assert!(signature_matches("video/mp4", &ftyp(b"isom")));
         assert!(signature_matches("video/quicktime", &ftyp(b"qt  ")));
-        assert!(signature_matches("video/webm", b"\x1a\x45\xdf\xa3\0\0\0\0\0\0\0\0\0\0\0\0"));
+        assert!(signature_matches(
+            "video/webm",
+            b"\x1a\x45\xdf\xa3\0\0\0\0\0\0\0\0\0\0\0\0"
+        ));
         for brand in [b"heic", b"heix", b"mif1", b"msf1"] {
             assert!(signature_matches("image/heic", &ftyp(brand)), "{brand:?}");
         }
@@ -452,8 +522,14 @@ mod tests {
     #[test]
     fn an_executable_renamed_to_jpg_is_rejected() {
         // Mach-O and PE headers -- the whole point of checking content.
-        assert!(!signature_matches("image/jpeg", b"\xcf\xfa\xed\xfe\0\0\0\0\0\0\0\0\0\0\0\0"));
-        assert!(!signature_matches("image/jpeg", b"MZ\x90\x00\0\0\0\0\0\0\0\0\0\0\0\0"));
+        assert!(!signature_matches(
+            "image/jpeg",
+            b"\xcf\xfa\xed\xfe\0\0\0\0\0\0\0\0\0\0\0\0"
+        ));
+        assert!(!signature_matches(
+            "image/jpeg",
+            b"MZ\x90\x00\0\0\0\0\0\0\0\0\0\0\0\0"
+        ));
         assert!(!signature_matches("image/png", b"#!/bin/sh\n\0\0\0\0\0\0"));
     }
 
@@ -479,7 +555,13 @@ mod tests {
 
     #[test]
     fn a_truncated_file_never_passes() {
-        for mime in ["image/jpeg", "image/png", "image/webp", "video/mp4", "image/heic"] {
+        for mime in [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "video/mp4",
+            "image/heic",
+        ] {
             assert!(!signature_matches(mime, b""), "{mime} on empty input");
             assert!(!signature_matches(mime, b"\xff"), "{mime} on 1 byte");
             assert!(!signature_matches(mime, b"\xff\xd8"), "{mime} on 2 bytes");

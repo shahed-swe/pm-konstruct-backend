@@ -57,7 +57,15 @@ pub struct AuthConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
+    /// Where the API reaches storage directly (head, range reads, delete).
     pub endpoint: String,
+    /// Host baked into presigned URLs, for clients rather than the API.
+    ///
+    /// Defaults to `endpoint`. They differ whenever the API sits on a private
+    /// network and clients do not: MinIO behind Cloudflare in production, and
+    /// a container talking to `host.docker.internal` while the browser uses
+    /// `localhost` in development.
+    pub public_endpoint: Option<String>,
     pub bucket: String,
     pub region: String,
     pub access_key_id: String,
@@ -108,6 +116,7 @@ impl Default for Config {
             },
             storage: StorageConfig {
                 endpoint: "http://localhost:9000".into(),
+                public_endpoint: None,
                 bucket: "pmk-media".into(),
                 region: "us-east-1".into(),
                 access_key_id: String::new(),

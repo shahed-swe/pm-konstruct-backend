@@ -46,15 +46,16 @@ impl MediaService {
         jobs: Arc<dyn JobRepository>,
         diary: Arc<dyn DiaryRepository>,
     ) -> Self {
-        Self { media, store, jobs, diary }
+        Self {
+            media,
+            store,
+            jobs,
+            diary,
+        }
     }
 
     /// Confirms the caller can reach the job a diary entry belongs to.
-    async fn assert_diary_access(
-        &self,
-        s: &SessionUser,
-        entry: DiaryEntryId,
-    ) -> AppResult<()> {
+    async fn assert_diary_access(&self, s: &SessionUser, entry: DiaryEntryId) -> AppResult<()> {
         let visible = if s.user.role.sees_all_company_jobs() {
             None
         } else {
@@ -156,15 +157,16 @@ impl MediaService {
 
         let key = self.key_for(s, owner, stored_name);
 
-        let head = self
-            .store
-            .head(&key)
-            .await?
-            .ok_or_else(|| AppError::Domain(DomainError::invalid("storedName", "was not uploaded")))?;
+        let head = self.store.head(&key).await?.ok_or_else(|| {
+            AppError::Domain(DomainError::invalid("storedName", "was not uploaded"))
+        })?;
 
         if head.size_bytes == 0 {
             self.discard(&key).await;
-            return Err(AppError::Domain(DomainError::invalid("size", "the file is empty")));
+            return Err(AppError::Domain(DomainError::invalid(
+                "size",
+                "the file is empty",
+            )));
         }
         if head.size_bytes > kind.max_bytes() {
             self.discard(&key).await;
@@ -214,7 +216,10 @@ impl MediaService {
         entry: DiaryEntryId,
     ) -> AppResult<Vec<Media>> {
         self.assert_diary_access(s, entry).await?;
-        Ok(self.media.list_for_diary(s.principal.scope(), entry).await?)
+        Ok(self
+            .media
+            .list_for_diary(s.principal.scope(), entry)
+            .await?)
     }
 
     pub async fn list_for_job(&self, s: &SessionUser, job: JobId) -> AppResult<Vec<Media>> {
@@ -261,7 +266,11 @@ impl MediaService {
         // The row goes now; the object is swept by the worker. The two cannot
         // be atomic, and an orphaned object costs storage whereas an orphaned
         // row shows the user a broken image.
-        if self.media.delete(s.principal.scope(), id, job_media).await? {
+        if self
+            .media
+            .delete(s.principal.scope(), id, job_media)
+            .await?
+        {
             Ok(())
         } else {
             Err(AppError::Domain(DomainError::not_found("Media")))

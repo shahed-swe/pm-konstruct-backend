@@ -73,7 +73,9 @@ impl From<JobMediaRow> for Media {
     fn from(r: JobMediaRow) -> Self {
         Self {
             id: MediaId(r.id),
-            owner: MediaOwner::Job { job: JobId(r.job_id) },
+            owner: MediaOwner::Job {
+                job: JobId(r.job_id),
+            },
             file_type: FileType::parse(&r.file_type).unwrap_or(FileType::Document),
             mime_type: r.mime_type,
             original_name: r.original_name,
@@ -118,9 +120,15 @@ impl PgMediaRepository {
         tx: &mut Transaction<'_, Postgres>,
         stored_name: &str,
     ) -> PortResult<()> {
+        // `ON CONFLICT DO NOTHING` without a conflict target, deliberately.
+        // Naming the target (`ON CONFLICT (stored_name)`) makes Postgres
+        // inspect the conflicting row, which requires SELECT on the table --
+        // and granting the API SELECT here would let it enumerate every
+        // tenant's object names. The untargeted form needs only INSERT and
+        // swallows the duplicate just the same.
         sqlx::query(
             "INSERT INTO media_deletion_queue (stored_name) VALUES ($1) \
-             ON CONFLICT (stored_name) DO NOTHING",
+             ON CONFLICT DO NOTHING",
         )
         .bind(stored_name)
         .execute(&mut **tx)
@@ -138,9 +146,8 @@ impl MediaRepository for PgMediaRepository {
         entry: DiaryEntryId,
     ) -> PortResult<Vec<Media>> {
         let mut tx = self.begin(scope).await?;
-        let sql = format!(
-            "SELECT {DIARY_COLS} FROM diary_media WHERE diary_entry_id = $1 ORDER BY id"
-        );
+        let sql =
+            format!("SELECT {DIARY_COLS} FROM diary_media WHERE diary_entry_id = $1 ORDER BY id");
         let rows: Vec<DiaryMediaRow> = sqlx::query_as(&sql)
             .bind(entry.get())
             .fetch_all(&mut *tx)
@@ -250,7 +257,11 @@ impl MediaRepository for PgMediaRepository {
 
     async fn delete(&self, scope: TenantScope, id: MediaId, job_media: bool) -> PortResult<bool> {
         let mut tx = self.begin(scope).await?;
-        let table = if job_media { "job_media" } else { "diary_media" };
+        let table = if job_media {
+            "job_media"
+        } else {
+            "diary_media"
+        };
 
         // RETURNING gives the stored name so the object can be queued in the
         // same transaction; a separate SELECT would race with a concurrent

@@ -16,7 +16,11 @@ use crate::config::StorageConfig;
 
 #[derive(Clone)]
 pub struct S3ObjectStore {
+    /// Used for direct calls from the API.
     client: Client,
+    /// Used only to generate presigned URLs, so they carry the host the
+    /// *client* can reach rather than the one the API uses.
+    presign_client: Client,
     bucket: String,
     presign_ttl: Duration,
 }
@@ -40,19 +44,24 @@ impl S3ObjectStore {
             "pmk-config",
         );
 
-        let s3 = aws_sdk_s3::Config::builder()
-            .behavior_version(BehaviorVersion::latest())
-            .region(Region::new(cfg.region.clone()))
-            .endpoint_url(&cfg.endpoint)
-            .credentials_provider(creds)
-            // MinIO addresses buckets by path, not by subdomain. Without this
-            // the SDK tries `http://pmk-media.localhost:9000`, which does not
-            // resolve.
-            .force_path_style(cfg.force_path_style)
-            .build();
+        // MinIO addresses buckets by path, not by subdomain. Without
+        // force_path_style the SDK tries `http://pmk-media.localhost:9000`,
+        // which does not resolve.
+        let build = |endpoint: &str| {
+            aws_sdk_s3::Config::builder()
+                .behavior_version(BehaviorVersion::latest())
+                .region(Region::new(cfg.region.clone()))
+                .endpoint_url(endpoint)
+                .credentials_provider(creds.clone())
+                .force_path_style(cfg.force_path_style)
+                .build()
+        };
+
+        let public = cfg.public_endpoint.as_deref().unwrap_or(&cfg.endpoint);
 
         Self {
-            client: Client::from_conf(s3),
+            client: Client::from_conf(build(&cfg.endpoint)),
+            presign_client: Client::from_conf(build(public)),
             bucket: cfg.bucket.clone(),
             presign_ttl: Duration::from_secs(cfg.presign_ttl_secs),
         }
@@ -66,7 +75,10 @@ impl S3ObjectStore {
     }
 
     fn unavailable(e: impl std::fmt::Display) -> PortError {
-        PortError::Unavailable { service: "storage", detail: e.to_string() }
+        PortError::Unavailable {
+            service: "storage",
+            detail: e.to_string(),
+        }
     }
 }
 
@@ -82,7 +94,7 @@ impl ObjectStore for S3ObjectStore {
         // client cannot presign a small JPEG and then upload a large
         // executable: S3 rejects the PUT if either header differs.
         let req = self
-            .client
+            .presign_client
             .put_object()
             .bucket(&self.bucket)
             .key(key)
@@ -102,7 +114,7 @@ impl ObjectStore for S3ObjectStore {
 
     async fn presign_get(&self, key: &str) -> PortResult<PresignedUrl> {
         let req = self
-            .client
+            .presign_client
             .get_object()
             .bucket(&self.bucket)
             .key(key)
@@ -204,7 +216,10 @@ mod tests {
     fn keys_are_tenant_prefixed() {
         let k = object_key(7, "diary", 42, "abc.jpg");
         assert_eq!(k, "7/diary/42/abc.jpg");
-        assert!(k.starts_with("7/"), "a bucket policy can scope on this prefix");
+        assert!(
+            k.starts_with("7/"),
+            "a bucket policy can scope on this prefix"
+        );
     }
 
     #[test]
