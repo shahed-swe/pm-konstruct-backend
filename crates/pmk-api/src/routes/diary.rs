@@ -22,6 +22,7 @@ pub fn router() -> Router<AppState> {
         .route("/", get(list).post(create))
         // Ahead of `/{id}` so "job" is never parsed as an entry id.
         .route("/job/{job_id}/etos", get(job_etos))
+        .route("/{id}/weather-snapshot", get(weather_snapshot))
         .route("/{id}", get(get_one).put(update).delete(remove))
         .route("/{id}/action-status", patch(set_action_status))
         .route("/{id}/notes", get(notes).post(add_note))
@@ -250,4 +251,20 @@ async fn job_etos(
         .etos_for_job(&session, pmk_domain::ids::JobId(job_id))
         .await?;
     Ok(Json(etos.into_iter().map(Into::into).collect()))
+}
+
+/// The structured weather reading recorded against an entry.
+///
+/// Null rather than 404 when none was taken: an entry without a reading is
+/// ordinary, and the UI renders an empty panel rather than an error.
+async fn weather_snapshot(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<SiteDiaryRead>,
+    Path(id): Path<i32>,
+) -> Result<Json<Option<crate::dto::WeatherSnapshotDto>>, ApiError> {
+    let snapshot = state
+        .diary
+        .weather_snapshot(&session, DiaryEntryId(id))
+        .await?;
+    Ok(Json(snapshot.map(Into::into)))
 }

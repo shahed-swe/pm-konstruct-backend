@@ -189,6 +189,14 @@ impl From<AppError> for ApiError {
             }
             AppError::Unauthenticated => ApiError::unauthenticated(),
             AppError::InvalidToken => ApiError::invalid_token(),
+            AppError::TooManyRequests(ref message) => {
+                ApiError::new(StatusCode::TOO_MANY_REQUESTS, message.clone())
+            }
+            // 503, not 500: the deployment has not been given credentials for
+            // this feature, which is a configuration state rather than a fault.
+            AppError::FeatureUnavailable(ref message) => {
+                ApiError::new(StatusCode::SERVICE_UNAVAILABLE, message.clone())
+            }
             AppError::RateLimited { retry_after_secs } => {
                 let mut err = ApiError::new(
                     StatusCode::TOO_MANY_REQUESTS,

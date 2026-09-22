@@ -25,6 +25,7 @@ pub mod reports;
 pub mod scheduler;
 pub mod settings;
 pub mod tenant;
+pub mod weather;
 
 pub use error::{DomainError, DomainResult};
 pub use identity::{HashKind, User};

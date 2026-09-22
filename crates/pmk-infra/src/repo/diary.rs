@@ -11,7 +11,7 @@ use pmk_domain::diary::{
 };
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId, UserId};
 use pmk_domain::tenant::TenantScope;
-use pmk_ports::repository::{DiaryFilter, DiaryRepository};
+use pmk_ports::repository::{DiaryFilter, DiaryRepository, WeatherSnapshot};
 use pmk_ports::{PortError, PortResult};
 use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -563,4 +563,83 @@ impl DiaryRepository for PgDiaryRepository {
         tx.commit().await.map_err(map_sqlx)?;
         Ok(row.into())
     }
+
+    // -- weather snapshot ----------------------------------------------------
+
+    async fn weather_snapshot(
+        &self,
+        scope: TenantScope,
+        entry: DiaryEntryId,
+    ) -> PortResult<Option<WeatherSnapshot>> {
+        let mut tx = self.begin(scope).await?;
+        let r = sqlx::query(&format!(
+            "SELECT {SNAPSHOT_COLS} FROM weather_snapshots WHERE diary_entry_id = $1"
+        ))
+        .bind(entry.get())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(r.as_ref().map(weather_snapshot_row))
+    }
+
+    async fn set_weather_snapshot(
+        &self,
+        scope: TenantScope,
+        snapshot: &WeatherSnapshot,
+    ) -> PortResult<WeatherSnapshot> {
+        let mut tx = self.begin(scope).await?;
+        // One row per entry, by the unique constraint from migration 0012.
+        // Re-reading conditions later replaces the reading rather than
+        // appending a second one.
+        let r = sqlx::query(&format!(
+            "INSERT INTO weather_snapshots \
+               (diary_entry_id, temperature_c, conditions, rain, wind_description, \
+                wind_speed_kmh, humidity_pct, source, snapshot_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) \
+             ON CONFLICT (diary_entry_id) DO UPDATE \
+               SET temperature_c = EXCLUDED.temperature_c, \
+                   conditions = EXCLUDED.conditions, \
+                   rain = EXCLUDED.rain, \
+                   wind_description = EXCLUDED.wind_description, \
+                   wind_speed_kmh = EXCLUDED.wind_speed_kmh, \
+                   humidity_pct = EXCLUDED.humidity_pct, \
+                   source = EXCLUDED.source, \
+                   snapshot_at = EXCLUDED.snapshot_at \
+             RETURNING {SNAPSHOT_COLS}"
+        ))
+        .bind(snapshot.diary_entry_id.get())
+        .bind(snapshot.temperature_c)
+        .bind(snapshot.conditions.as_deref())
+        .bind(snapshot.rain.as_deref())
+        .bind(snapshot.wind_description.as_deref())
+        .bind(snapshot.wind_speed_kmh)
+        .bind(snapshot.humidity_pct)
+        .bind(&snapshot.source)
+        .bind(snapshot.snapshot_at)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(weather_snapshot_row(&r))
+    }
 }
+
+/// Maps a `weather_snapshots` row.
+fn weather_snapshot_row(r: &sqlx::postgres::PgRow) -> WeatherSnapshot {
+    use sqlx::Row as _;
+    WeatherSnapshot {
+        diary_entry_id: DiaryEntryId(r.get("diary_entry_id")),
+        temperature_c: r.get("temperature_c"),
+        conditions: r.get("conditions"),
+        rain: r.get("rain"),
+        wind_description: r.get("wind_description"),
+        wind_speed_kmh: r.get("wind_speed_kmh"),
+        humidity_pct: r.get("humidity_pct"),
+        source: r.get("source"),
+        snapshot_at: r.get("snapshot_at"),
+    }
+}
+
+const SNAPSHOT_COLS: &str = "diary_entry_id, temperature_c, conditions, rain, \
+                             wind_description, wind_speed_kmh, humidity_pct, source, snapshot_at";

@@ -6,7 +6,9 @@ use pmk_domain::diary::{
 };
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId};
 use pmk_domain::DomainError;
-use pmk_ports::repository::{DiaryFilter, DiaryRepository, JobRepository, WeatherProvider};
+use pmk_ports::repository::{
+    DiaryFilter, DiaryRepository, JobRepository, WeatherProvider, WeatherSnapshot,
+};
 use pmk_ports::Clock;
 use pmk_ports::{BroadcastEvent, EventBus};
 
@@ -181,6 +183,19 @@ impl DiaryService {
         if let Err(e) = bus.publish(&event).await {
             tracing::warn!(error = %e, "could not broadcast a diary change");
         }
+    }
+
+    /// The structured weather reading for an entry, if one was recorded.
+    pub async fn weather_snapshot(
+        &self,
+        s: &SessionUser,
+        entry: DiaryEntryId,
+    ) -> AppResult<Option<WeatherSnapshot>> {
+        self.get(s, entry).await?;
+        Ok(self
+            .diary
+            .weather_snapshot(s.principal.scope(), entry)
+            .await?)
     }
 
     // ── notes ───────────────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ pub struct Config {
     pub telemetry: TelemetryConfig,
     pub notifications: NotificationsConfig,
     pub smtp: SmtpConfig,
+    pub weather: WeatherConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +84,13 @@ pub struct TenancyConfig {
     /// dates, scheduler days, report ranges. Never the host's local zone.
     /// See domain-rules.md R1 and the cross-cutting timezone note.
     pub default_timezone: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeatherConfig {
+    /// OpenWeatherMap key. Empty means the feature is simply not offered,
+    /// which is how production has always run: no key has ever been set.
+    pub openweather_api_key: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +172,9 @@ impl Default for Config {
                 json_logs: false,
                 otlp_endpoint: None,
                 service_name: "pmk-api".into(),
+            },
+            weather: WeatherConfig {
+                openweather_api_key: String::new(),
             },
             smtp: SmtpConfig {
                 allow_private_relays: false,

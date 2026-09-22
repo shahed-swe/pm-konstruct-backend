@@ -11,5 +11,6 @@ pub mod mail;
 pub mod repo;
 pub mod storage;
 pub mod telemetry;
+pub mod weather;
 
 pub use config::Config;

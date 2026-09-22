@@ -20,5 +20,6 @@ pub mod reports;
 pub mod scheduler;
 pub mod settings;
 pub mod users;
+pub mod weather;
 
 pub use error::{AppError, AppResult};

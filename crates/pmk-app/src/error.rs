@@ -30,6 +30,17 @@ pub enum AppError {
     #[error("Too many attempts. Please try again later.")]
     RateLimited { retry_after_secs: u64 },
 
+    /// The caller exceeded a per-feature quota. Distinct from `RateLimited`,
+    /// which is the login throttle and carries its own fixed message.
+    #[error("{0}")]
+    TooManyRequests(String),
+
+    /// A feature this deployment has not been configured for. Not an error in
+    /// the code: the AI assistant and the weather lookup both ship without
+    /// credentials and the UI simply does not offer them.
+    #[error("{0}")]
+    FeatureUnavailable(String),
+
     #[error(transparent)]
     Port(#[from] PortError),
 

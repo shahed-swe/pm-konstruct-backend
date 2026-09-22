@@ -16,6 +16,7 @@ pub mod reports;
 pub mod scheduler;
 pub mod settings;
 pub mod users;
+pub mod weather;
 
 pub use auth::*;
 pub use call_forward::*;
@@ -30,3 +31,4 @@ pub use reports::*;
 pub use scheduler::*;
 pub use settings::*;
 pub use users::*;
+pub use weather::*;

@@ -395,6 +395,44 @@ pub trait DiaryRepository: Send + Sync {
         author: UserId,
         content: &str,
     ) -> PortResult<DiaryNoteComment>;
+
+    // -- weather snapshot ----------------------------------------------------
+
+    /// The structured reading for an entry, if one was recorded.
+    async fn weather_snapshot(
+        &self,
+        scope: TenantScope,
+        entry: DiaryEntryId,
+    ) -> PortResult<Option<WeatherSnapshot>>;
+
+    /// Records or replaces an entry's reading. One per entry.
+    async fn set_weather_snapshot(
+        &self,
+        scope: TenantScope,
+        snapshot: &WeatherSnapshot,
+    ) -> PortResult<WeatherSnapshot>;
+}
+
+/// A weather reading recorded against one diary entry.
+///
+/// Separate from the `site_diary` columns: those hold the reading taken when
+/// the entry was written, while this is a structured record that can be
+/// updated afterwards -- a supervisor correcting "sunny" to "showers" from
+/// memory at the end of the day.
+#[derive(Debug, Clone)]
+pub struct WeatherSnapshot {
+    pub diary_entry_id: DiaryEntryId,
+    pub temperature_c: Option<rust_decimal::Decimal>,
+    pub conditions: Option<String>,
+    /// `none`, `light`, `moderate`, `heavy`.
+    pub rain: Option<String>,
+    pub wind_description: Option<String>,
+    pub wind_speed_kmh: Option<rust_decimal::Decimal>,
+    pub humidity_pct: Option<i32>,
+    /// `manual` or `api`, so a corrected reading is distinguishable from a
+    /// fetched one.
+    pub source: String,
+    pub snapshot_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Current conditions for the weather stamp.

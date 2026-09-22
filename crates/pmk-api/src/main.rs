@@ -66,6 +66,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     let clock: Arc<dyn pmk_ports::Clock> = Arc::new(SystemClock::new(config.timezone()));
 
+    // `None` when no API key is configured: the endpoint then returns 503 and
+    // the diary simply saves without a stamp. No key has ever been set in
+    // production, so this is the normal state rather than a fault.
+    let weather_provider: Option<Arc<dyn pmk_ports::repository::WeatherProvider>> =
+        pmk_infra::weather::OpenWeatherProvider::new(&config.weather.openweather_api_key)
+            .map(|p| Arc::new(p) as Arc<dyn pmk_ports::repository::WeatherProvider>);
+
     // Starts LISTENing before any service that publishes to it is built, so
     // an event raised by the first request has somewhere to go.
     let events: Arc<dyn pmk_ports::EventBus> =
@@ -73,9 +80,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let diary = Arc::new(pmk_app::diary::DiaryService::new(
         Arc::new(PgDiaryRepository::new(pool.clone())),
         job_repo,
-        // Wired in Phase 14; until then entries save with no weather stamp,
-        // which is the same graceful degradation R8 requires on an outage.
-        None,
+        // `None` when no API key is configured. Either way a failure here
+        // never blocks the write: the entry saves without a stamp, which is
+        // the degradation R8 requires (see DiaryService::create).
+        weather_provider.clone(),
         clock.clone(),
         Some(events.clone()),
     ));
@@ -148,6 +156,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
     ));
 
+    let weather = Arc::new(pmk_app::weather::WeatherService::new(
+        weather_provider.clone(),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -164,6 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         notifications,
         users,
         settings,
+        weather,
         events,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
