@@ -269,9 +269,24 @@ impl DiaryRepository for PgDiaryRepository {
         .await
         .map_err(map_sqlx)?;
 
+        // The earliest note, and the count. `DISTINCT ON` picks one row per
+        // entry in the same order the notes are displayed, so the summary is
+        // the note a reader would see first rather than an arbitrary one.
+        let notes: Vec<(i32, String, i64)> = sqlx::query_as(
+            "SELECT DISTINCT ON (n.diary_entry_id) n.diary_entry_id, n.content, \
+                    count(*) OVER (PARTITION BY n.diary_entry_id) AS note_count \
+             FROM diary_notes n \
+             WHERE n.diary_entry_id = ANY($1) AND NOT n.archived \
+             ORDER BY n.diary_entry_id, n.sort_order, n.id",
+        )
+        .bind(&raw)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+
         tx.commit().await.map_err(map_sqlx)?;
 
-        Ok(rows
+        let mut out: std::collections::HashMap<i32, DiaryContext> = rows
             .into_iter()
             .map(|(id, job_name, job_number, job_address, author_name)| {
                 (
@@ -281,10 +296,21 @@ impl DiaryRepository for PgDiaryRepository {
                         job_number,
                         job_address,
                         author_name,
+                        first_note: None,
+                        note_count: 0,
                     },
                 )
             })
-            .collect())
+            .collect();
+
+        for (entry_id, content, count) in notes {
+            if let Some(context) = out.get_mut(&entry_id) {
+                context.first_note = Some(content);
+                context.note_count = count;
+            }
+        }
+
+        Ok(out)
     }
 
     async fn create(

@@ -381,6 +381,15 @@ pub struct DiaryContext {
     pub job_number: Option<String>,
     pub job_address: Option<String>,
     pub author_name: Option<String>,
+
+    /// The first note on the entry, and how many there are.
+    ///
+    /// Since notes replaced the single work-completed box, an entry written
+    /// through the diary form has an empty `work_completed` and all its
+    /// substance in its notes -- so a list that showed only the entry's own
+    /// fields read "Diary entry" for every row. The legacy had exactly that.
+    pub first_note: Option<String>,
+    pub note_count: i64,
 }
 
 #[async_trait]

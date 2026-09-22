@@ -56,6 +56,17 @@ pub struct DiaryEntryDto {
     /// entry itself stays, because it is a site record.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_name: Option<String>,
+
+    /// The first note, and how many there are.
+    ///
+    /// An entry written through the diary form leaves `workCompleted` empty
+    /// and puts everything in its notes, so a list built from the entry's own
+    /// fields alone shows "Diary entry" on every row -- which is what the
+    /// legacy list did. These let it show the entry's actual first line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note_count: Option<i64>,
 }
 
 impl From<pmk_app::diary::DiaryEntryView> for DiaryEntryDto {
@@ -65,6 +76,8 @@ impl From<pmk_app::diary::DiaryEntryView> for DiaryEntryDto {
             job_number: v.context.job_number,
             job_address: v.context.job_address,
             author_name: v.context.author_name,
+            first_note: v.context.first_note,
+            note_count: Some(v.context.note_count),
             ..Self::from(v.entry)
         }
     }
@@ -98,6 +111,8 @@ impl From<DiaryEntry> for DiaryEntryDto {
             job_number: None,
             job_address: None,
             author_name: None,
+            first_note: None,
+            note_count: None,
         }
     }
 }

@@ -154,10 +154,13 @@ impl DiaryEntryInput {
         if self.job_id <= 0 {
             return Err(DomainError::invalid("jobId", "is required"));
         }
-        // `site_diary.work_completed` is NOT NULL with no default.
-        if self.work_completed.trim().is_empty() {
-            return Err(DomainError::invalid("workCompleted", "is required"));
-        }
+        // `work_completed` is deliberately not required.
+        //
+        // The column is NOT NULL, but since notes replaced the single
+        // work-completed box, an entry written through the diary form carries
+        // an empty string here and all its substance in its notes -- which is
+        // what the legacy did, and what its form still produces. Requiring it
+        // made every entry written the normal way fail to save.
         if let Some(w) = self.workforce {
             if w < 0 {
                 return Err(DomainError::invalid("workforce", "cannot be negative"));
@@ -256,14 +259,19 @@ mod tests {
         assert!(entry().validate().is_ok());
     }
 
+    /// An entry with no work-completed text is valid.
+    ///
+    /// The diary form puts everything in notes and leaves this empty, so
+    /// requiring it rejects the ordinary way of writing an entry. The column
+    /// is still NOT NULL; an empty string satisfies it.
     #[test]
-    fn work_completed_is_required() {
+    fn work_completed_may_be_empty() {
         let mut e = entry();
         e.work_completed = "   ".into();
-        match e.validate() {
-            Err(DomainError::Invalid { field, .. }) => assert_eq!(field, "workCompleted"),
-            other => panic!("expected rejection, got {other:?}"),
-        }
+        assert!(e.validate().is_ok());
+
+        e.work_completed = String::new();
+        assert!(e.validate().is_ok());
     }
 
     #[test]
