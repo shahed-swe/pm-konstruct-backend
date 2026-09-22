@@ -40,13 +40,22 @@ pub fn verify(password: &str, stored: &str) -> Verification {
                         .is_ok()
                 })
                 .unwrap_or(false);
-            Verification { matched, needs_rehash: false }
+            Verification {
+                matched,
+                needs_rehash: false,
+            }
         }
         HashKind::Bcrypt => {
             let matched = bcrypt::verify(password, stored).unwrap_or(false);
-            Verification { matched, needs_rehash: matched }
+            Verification {
+                matched,
+                needs_rehash: matched,
+            }
         }
-        HashKind::Unknown => Verification { matched: false, needs_rehash: false },
+        HashKind::Unknown => Verification {
+            matched: false,
+            needs_rehash: false,
+        },
     }
 }
 

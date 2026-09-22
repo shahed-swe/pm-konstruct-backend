@@ -83,7 +83,11 @@ impl Entitlement {
     /// matches the legacy default `billing_onboarding_completed = true`.
     #[must_use]
     pub const fn permissive() -> Self {
-        Self { can_access_application: true, can_configure_account: true, onboarding_complete: true }
+        Self {
+            can_access_application: true,
+            can_configure_account: true,
+            onboarding_complete: true,
+        }
     }
 }
 

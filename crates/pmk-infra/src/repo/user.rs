@@ -112,11 +112,11 @@ impl UserRepository for PgUserRepository {
         // is what invalidates already-issued access tokens. Runs pre-tenant
         // during the login rehash, so it uses the 0006 function.
         sqlx::query("SELECT auth_replace_password_hash($2, $1)")
-        .bind(hash)
-        .bind(id.get())
-        .execute(&self.pool)
-        .await
-        .map_err(map_sqlx)?;
+            .bind(hash)
+            .bind(id.get())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx)?;
         Ok(())
     }
 

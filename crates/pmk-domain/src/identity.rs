@@ -88,6 +88,9 @@ mod tests {
 
     #[test]
     fn email_normalisation_matches_the_legacy_login() {
-        assert_eq!(User::normalise_email("  Bob@Example.COM "), "bob@example.com");
+        assert_eq!(
+            User::normalise_email("  Bob@Example.COM "),
+            "bob@example.com"
+        );
     }
 }

@@ -40,7 +40,11 @@ impl ApiError {
     pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
         Self {
             status,
-            body: ErrorBody { error: message.into(), code: None, field: None },
+            body: ErrorBody {
+                error: message.into(),
+                code: None,
+                field: None,
+            },
             retry_after_secs: None,
         }
     }
@@ -142,7 +146,10 @@ impl From<PortError> for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 format!("{service} is temporarily unavailable"),
             ),
-            PortError::Rejected { service, ref detail } => ApiError::new(
+            PortError::Rejected {
+                service,
+                ref detail,
+            } => ApiError::new(
                 StatusCode::BAD_GATEWAY,
                 format!("{service} rejected the request: {detail}"),
             ),
@@ -198,18 +205,13 @@ fn constraint_message(constraint: &str) -> String {
         "jobs_company_job_number_unique" => {
             "A job with this number already exists for your company".into()
         }
-        "users_email_unique" => "An account with this email already exists".into()
-        ,
-        "uq_job_assignments_single_primary" => {
-            "This job already has a primary supervisor".into()
-        }
+        "users_email_unique" => "An account with this email already exists".into(),
+        "uq_job_assignments_single_primary" => "This job already has a primary supervisor".into(),
         "uq_job_assignments_job_user" => "This user is already assigned to the job".into(),
         "uq_scheduler_company_worker_date" => {
             "That worker is already allocated on this date".into()
         }
-        "uq_scheduler_worker_absence_period" => {
-            "An identical absence period already exists".into()
-        }
+        "uq_scheduler_worker_absence_period" => "An identical absence period already exists".into(),
         "scheduler_allocation_target_check" => {
             "An allocation must target either a job or a maintenance job".into()
         }
@@ -285,7 +287,10 @@ mod tests {
     fn internal_errors_never_echo_their_detail() {
         let (status, json) = body_of(AppError::Internal("connection string leaked".into()).into());
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-        assert!(!json.contains("connection string"), "detail must stay in logs");
+        assert!(
+            !json.contains("connection string"),
+            "detail must stay in logs"
+        );
         assert_eq!(json, r#"{"error":"Internal server error"}"#);
     }
 
@@ -296,7 +301,10 @@ mod tests {
         }
         .into();
         assert_eq!(e.status, StatusCode::CONFLICT);
-        assert!(e.body.error.contains("job number already exists"));
+        assert_eq!(
+            e.body.error,
+            "A job with this number already exists for your company"
+        );
     }
 
     #[test]

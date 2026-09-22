@@ -71,8 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Command::Migrate { dry_run } => {
-            let migrator = sqlx::migrate::Migrator::new(std::path::Path::new("./migrations"))
-                .await?;
+            let migrator =
+                sqlx::migrate::Migrator::new(std::path::Path::new("./migrations")).await?;
             if dry_run {
                 // `sqlx` has no dry-run, so report the gap instead of
                 // pretending to apply anything.
@@ -97,11 +97,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Migrations applied.");
         }
         Command::MigrateStatus => {
-            let migrator = sqlx::migrate::Migrator::new(std::path::Path::new("./migrations"))
-                .await?;
+            let migrator =
+                sqlx::migrate::Migrator::new(std::path::Path::new("./migrations")).await?;
             let applied = applied_versions(&pool).await?;
             for m in migrator.iter() {
-                let mark = if applied.contains(&m.version) { "applied" } else { "pending" };
+                let mark = if applied.contains(&m.version) {
+                    "applied"
+                } else {
+                    "pending"
+                };
                 println!("  {:<8} {:<20} {}", mark, m.version, m.description);
             }
         }
@@ -120,7 +124,9 @@ async fn applied_versions(pool: &sqlx::PgPool) -> Result<Vec<i64>, sqlx::Error> 
         sqlx::query_as("SELECT version FROM _sqlx_migrations ORDER BY version")
             .fetch_all(pool)
             .await;
-    Ok(rows.map(|r| r.into_iter().map(|(v,)| v).collect()).unwrap_or_default())
+    Ok(rows
+        .map(|r| r.into_iter().map(|(v,)| v).collect())
+        .unwrap_or_default())
 }
 
 fn redact_url(url: &str) -> String {
@@ -165,12 +171,36 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
     // Company 1 covers every role plus both permission states; company 2 exists
     // solely so tenant-isolation tests have somewhere to fail to reach.
     let users: [(i32, i32, &str, &str, &str); 6] = [
-        (1, 1, "James Morrison", "james.morrison@buildsmart.com.au", "MANAGER"),
-        (2, 1, "Sarah Johnson", "sarah.johnson@buildsmart.com.au", "SUPERVISOR"),
-        (3, 1, "Mike Chen", "mike.chen@buildsmart.com.au", "SUPERVISOR"),
+        (
+            1,
+            1,
+            "James Morrison",
+            "james.morrison@buildsmart.com.au",
+            "MANAGER",
+        ),
+        (
+            2,
+            1,
+            "Sarah Johnson",
+            "sarah.johnson@buildsmart.com.au",
+            "SUPERVISOR",
+        ),
+        (
+            3,
+            1,
+            "Mike Chen",
+            "mike.chen@buildsmart.com.au",
+            "SUPERVISOR",
+        ),
         (4, 1, "Emma Davis", "emma.davis@buildsmart.com.au", "OFFICE"),
         (5, 1, "Tom Nguyen", "tom.nguyen@buildsmart.com.au", "OFFICE"),
-        (6, 2, "Rival Manager", "rival.manager@rival.com.au", "MANAGER"),
+        (
+            6,
+            2,
+            "Rival Manager",
+            "rival.manager@rival.com.au",
+            "MANAGER",
+        ),
     ];
     for (id, company, name, email, role) in users {
         sqlx::query(

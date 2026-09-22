@@ -31,7 +31,11 @@ pub fn router() -> Router<AppState> {
 /// refresh cookie is additionally path-scoped so it is only ever sent to the
 /// refresh and logout endpoints.
 fn session_cookies(state: &AppState, out: &LoginOutcome) -> Vec<HeaderValue> {
-    let secure = if state.config.auth.cookie_secure { "; Secure" } else { "" };
+    let secure = if state.config.auth.cookie_secure {
+        "; Secure"
+    } else {
+        ""
+    };
     let domain = state
         .config
         .auth
@@ -56,7 +60,11 @@ fn session_cookies(state: &AppState, out: &LoginOutcome) -> Vec<HeaderValue> {
 }
 
 fn clearing_cookies(state: &AppState) -> Vec<HeaderValue> {
-    let secure = if state.config.auth.cookie_secure { "; Secure" } else { "" };
+    let secure = if state.config.auth.cookie_secure {
+        "; Secure"
+    } else {
+        ""
+    };
     [
         format!("{ACCESS_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{secure}"),
         format!("{REFRESH_COOKIE}=; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=0{secure}"),

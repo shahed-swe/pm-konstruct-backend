@@ -22,7 +22,10 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn healthz(State(state): State<AppState>) -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok", ready: state.is_ready() })
+    Json(HealthResponse {
+        status: "ok",
+        ready: state.is_ready(),
+    })
 }
 
 async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadyResponse>) {
@@ -30,7 +33,11 @@ async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadyRespons
     let migrations = state.is_ready();
     let ok = database && migrations;
     (
-        if ok { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE },
+        if ok {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
         Json(ReadyResponse {
             status: if ok { "ready" } else { "starting" },
             database,

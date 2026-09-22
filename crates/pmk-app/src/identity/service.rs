@@ -206,18 +206,19 @@ impl AuthService {
             .await?;
         let entitlement = self.billing.entitlement(user.company_id).await?;
 
-        Ok(SessionUser { user, principal, permissions, entitlement })
+        Ok(SessionUser {
+            user,
+            principal,
+            permissions,
+            entitlement,
+        })
     }
 
     async fn issue_session(&self, user: User) -> AppResult<LoginOutcome> {
         self.issue_in_family(user, uuid::Uuid::new_v4()).await
     }
 
-    async fn issue_in_family(
-        &self,
-        user: User,
-        family_id: uuid::Uuid,
-    ) -> AppResult<LoginOutcome> {
+    async fn issue_in_family(&self, user: User, family_id: uuid::Uuid) -> AppResult<LoginOutcome> {
         let now = Utc::now();
         let (access_token, access_claims) = self.codec.issue_access(&user, now)?;
         let refresh = RefreshToken::generate();

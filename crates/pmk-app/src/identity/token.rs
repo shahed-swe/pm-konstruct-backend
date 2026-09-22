@@ -176,8 +176,7 @@ mod tests {
     #[test]
     fn a_token_from_another_secret_is_rejected() {
         let (t, _) = codec().issue_access(&user(), Utc::now()).unwrap();
-        let other =
-            TokenCodec::new(&"x".repeat(48), std::time::Duration::from_secs(900)).unwrap();
+        let other = TokenCodec::new(&"x".repeat(48), std::time::Duration::from_secs(900)).unwrap();
         assert!(other.verify_access(&t).is_err());
     }
 
@@ -203,7 +202,11 @@ mod tests {
         u.password_changed_at = Some(Utc::now());
         let c = codec();
         let (t, _) = c.issue_access(&u, Utc::now()).unwrap();
-        assert!(c.verify_access(&t).unwrap().password_changed_at_ms.is_some());
+        assert!(c
+            .verify_access(&t)
+            .unwrap()
+            .password_changed_at_ms
+            .is_some());
     }
 
     #[test]

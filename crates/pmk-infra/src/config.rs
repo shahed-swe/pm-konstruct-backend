@@ -129,11 +129,16 @@ impl Default for Config {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    // Boxed: figment::Error is ~208 bytes and would make every Result in the
+    // startup path that large.
     #[error("configuration could not be read: {0}")]
-    Read(#[from] figment::Error),
+    Read(#[from] Box<figment::Error>),
 
     #[error("{key} is required but not set. {hint}")]
-    Missing { key: &'static str, hint: &'static str },
+    Missing {
+        key: &'static str,
+        hint: &'static str,
+    },
 
     #[error("{key} is invalid: {reason}")]
     Invalid { key: &'static str, reason: String },
@@ -145,7 +150,8 @@ impl Config {
         let cfg: Self = Figment::from(Serialized::defaults(Self::default()))
             .merge(Toml::file("pmk.toml"))
             .merge(Env::prefixed("PMK__").split("__"))
-            .extract()?;
+            .extract()
+            .map_err(Box::new)?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -174,7 +180,12 @@ impl Config {
                 ),
             });
         }
-        if self.tenancy.default_timezone.parse::<chrono_tz::Tz>().is_err() {
+        if self
+            .tenancy
+            .default_timezone
+            .parse::<chrono_tz::Tz>()
+            .is_err()
+        {
             return Err(ConfigError::Invalid {
                 key: "PMK__TENANCY__DEFAULT_TIMEZONE",
                 reason: format!(

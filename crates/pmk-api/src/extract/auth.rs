@@ -16,7 +16,11 @@ pub const ACCESS_COOKIE: &str = "pmk_access";
 pub const REFRESH_COOKIE: &str = "pmk_refresh";
 
 fn bearer_from(parts: &Parts) -> Option<String> {
-    if let Some(v) = parts.headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+    if let Some(v) = parts
+        .headers
+        .get(AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+    {
         if let Some(rest) = v.strip_prefix("Bearer ") {
             let t = rest.trim();
             if !t.is_empty() {

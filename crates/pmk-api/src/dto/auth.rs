@@ -53,7 +53,10 @@ pub struct PermissionDto {
 
 impl From<Permission> for PermissionDto {
     fn from(p: Permission) -> Self {
-        Self { resource: p.resource, action: p.action }
+        Self {
+            resource: p.resource,
+            action: p.action,
+        }
     }
 }
 
