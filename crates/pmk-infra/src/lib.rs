@@ -7,6 +7,7 @@
 pub mod config;
 pub mod db;
 pub mod events;
+pub mod mail;
 pub mod repo;
 pub mod storage;
 pub mod telemetry;

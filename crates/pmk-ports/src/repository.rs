@@ -1694,3 +1694,49 @@ pub trait CallForwardTemplateRepository: Send + Sync {
         replace: bool,
     ) -> PortResult<usize>;
 }
+
+// ── settings ────────────────────────────────────────────────────────────────
+
+use pmk_domain::settings::{Branding, BrandingInput, EmailSettings};
+
+#[async_trait]
+pub trait SettingsRepository: Send + Sync {
+    /// A company's branding, or the defaults when it has never been set.
+    async fn branding(&self, scope: TenantScope) -> PortResult<Branding>;
+
+    /// The branding shown before anyone has signed in.
+    ///
+    /// The login page needs a logo, and at that point there is no session to
+    /// say whose. The oldest company is used rather than a hardcoded id, so
+    /// this stays right as companies come and go.
+    async fn default_branding(&self) -> PortResult<Branding>;
+
+    async fn set_branding(&self, scope: TenantScope, input: &BrandingInput)
+        -> PortResult<Branding>;
+
+    /// Points the logo or banner at a stored object, or clears it.
+    ///
+    /// Returns the object key that was displaced, so the caller can sweep it.
+    async fn set_branding_image(
+        &self,
+        scope: TenantScope,
+        banner: bool,
+        object_key: Option<&str>,
+    ) -> PortResult<Option<String>>;
+
+    /// Email settings without the password.
+    async fn email_settings(&self, scope: TenantScope) -> PortResult<EmailSettings>;
+
+    /// True when a password is stored, without revealing it.
+    async fn has_smtp_password(&self, scope: TenantScope) -> PortResult<bool>;
+
+    /// The stored password, for sending. Never leaves the server.
+    async fn smtp_password(&self, scope: TenantScope) -> PortResult<Option<String>>;
+
+    /// Saves email settings. A `None` password leaves the stored one alone.
+    async fn set_email_settings(
+        &self,
+        scope: TenantScope,
+        input: &EmailSettings,
+    ) -> PortResult<EmailSettings>;
+}

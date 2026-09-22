@@ -13,6 +13,7 @@ use pmk_app::notifications::NotificationService;
 use pmk_app::progress::ProgressService;
 use pmk_app::reports::ReportsService;
 use pmk_app::scheduler::SchedulerService;
+use pmk_app::settings::SettingsService;
 use pmk_app::users::UsersService;
 use pmk_infra::Config;
 use pmk_ports::Clock;
@@ -32,6 +33,7 @@ pub struct AppState {
     pub reports: Arc<ReportsService>,
     pub notifications: Arc<NotificationService>,
     pub users: Arc<UsersService>,
+    pub settings: Arc<SettingsService>,
     pub events: Arc<dyn pmk_ports::EventBus>,
     pub clock: Arc<dyn Clock>,
     pub pool: sqlx::PgPool,

@@ -13,7 +13,7 @@ use pmk_infra::repo::{
     PgCallForwardTemplateRepository, PgDashboardRepository, PgDiaryRepository, PgFormsRepository,
     PgJobLinkRepository, PgJobRepository, PgJobTaskRepository, PgMediaRepository,
     PgNotificationRepository, PgProgressRepository, PgRefreshTokenRepository, PgReportsRepository,
-    PgSchedulerRepository, PgUserRepository,
+    PgSchedulerRepository, PgSettingsRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -91,6 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store: Arc<dyn pmk_ports::ObjectStore> =
         Arc::new(pmk_infra::storage::S3ObjectStore::new(&config.storage));
     let store2 = store.clone();
+    let store3 = store.clone();
     let media = Arc::new(pmk_app::media::MediaService::new(
         Arc::new(PgMediaRepository::new(pool.clone())),
         store,
@@ -139,6 +140,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock.clone(),
     ));
 
+    let settings = Arc::new(pmk_app::settings::SettingsService::new(
+        Arc::new(PgSettingsRepository::new(pool.clone())),
+        store3,
+        Arc::new(pmk_infra::mail::LettreEmailSender::allowing_private_relays(
+            config.smtp.allow_private_relays,
+        )),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -154,6 +163,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         reports,
         notifications,
         users,
+        settings,
         events,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
@@ -179,6 +189,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
+    if config.smtp.allow_private_relays {
+        tracing::warn!(
+            "PMK__SMTP__ALLOW_PRIVATE_RELAYS is on: the server will connect to \
+             mail relays on private addresses. This is for local development \
+             only and must never be set in production."
+        );
+    }
+
     tracing::info!(%addr, "listening");
 
     // Express treated `/api/jobs` and `/api/jobs/` as the same route; axum

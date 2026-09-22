@@ -18,10 +18,12 @@ pub mod identity;
 pub mod ids;
 pub mod job;
 pub mod media;
+pub mod net;
 pub mod notifications;
 pub mod progress;
 pub mod reports;
 pub mod scheduler;
+pub mod settings;
 pub mod tenant;
 
 pub use error::{DomainError, DomainResult};

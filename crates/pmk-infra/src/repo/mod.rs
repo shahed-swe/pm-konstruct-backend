@@ -16,6 +16,7 @@ pub mod progress;
 pub mod refresh_token;
 pub mod reports;
 pub mod scheduler;
+pub mod settings;
 pub mod user;
 
 pub use billing::PgBillingRepository;
@@ -34,4 +35,5 @@ pub use progress::PgProgressRepository;
 pub use refresh_token::PgRefreshTokenRepository;
 pub use reports::PgReportsRepository;
 pub use scheduler::PgSchedulerRepository;
+pub use settings::PgSettingsRepository;
 pub use user::PgUserRepository;

@@ -15,4 +15,5 @@ pub mod notifications;
 pub mod progress;
 pub mod reports;
 pub mod scheduler;
+pub mod settings;
 pub mod users;

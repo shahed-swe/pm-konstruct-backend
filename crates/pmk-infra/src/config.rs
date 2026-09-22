@@ -22,6 +22,7 @@ pub struct Config {
     pub tenancy: TenancyConfig,
     pub telemetry: TelemetryConfig,
     pub notifications: NotificationsConfig,
+    pub smtp: SmtpConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +83,23 @@ pub struct TenancyConfig {
     /// dates, scheduler days, report ranges. Never the host's local zone.
     /// See domain-rules.md R1 and the cross-cutting timezone note.
     pub default_timezone: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmtpConfig {
+    /// Lets the server connect to a mail relay on a private address.
+    ///
+    /// **Development only.** A company's SMTP host is chosen by whoever
+    /// configures the account, and the server then connects to it; allowing
+    /// private addresses turns that into server-side request forgery -- an
+    /// authenticated manager could point it at a cloud metadata endpoint or an
+    /// internal admin port and have the server reach it for them.
+    ///
+    /// It exists so the local stack can send to MailHog, which necessarily
+    /// listens on a private address. It defaults to `false`, production never
+    /// sets it, and startup logs a warning when it is on so a misconfigured
+    /// deployment is visible rather than silent.
+    pub allow_private_relays: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +164,9 @@ impl Default for Config {
                 json_logs: false,
                 otlp_endpoint: None,
                 service_name: "pmk-api".into(),
+            },
+            smtp: SmtpConfig {
+                allow_private_relays: false,
             },
             notifications: NotificationsConfig {
                 vapid_public_key: String::new(),

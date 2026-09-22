@@ -13,6 +13,6 @@ pub mod auth;
 
 pub use auth::{
     AuthUser, CallForwardRead, CallForwardWrite, Entitled, JobsRead, JobsWrite, ManagerOnly,
-    ManagerOrSupervisor, PermissionSpec, ReportsRead, RequirePermission, RequireRole,
+    ManagerOrSupervisor, MaybeAuth, PermissionSpec, ReportsRead, RequirePermission, RequireRole,
     SiteDiaryRead, SiteDiaryWrite, TradeSchedulerRead, TradeSchedulerWrite,
 };

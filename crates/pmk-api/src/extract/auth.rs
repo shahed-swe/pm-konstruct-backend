@@ -77,6 +77,31 @@ impl FromRequestParts<AppState> for AuthUser {
     }
 }
 
+/// A caller who may or may not be signed in.
+///
+/// For the handful of routes that must work before anyone has authenticated:
+/// the login page reads the company's branding and logo. A present-but-invalid
+/// token is treated as absent rather than rejected, so an expired session does
+/// not leave the login page without its own branding.
+#[derive(Debug, Clone)]
+pub struct MaybeAuth(pub Option<SessionUser>);
+
+impl FromRequestParts<AppState> for MaybeAuth {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(Self(
+            match AuthUser::from_request_parts(parts, state).await {
+                Ok(AuthUser(session)) => Some(session),
+                Err(_) => None,
+            },
+        ))
+    }
+}
+
 /// A caller whose subscription permits using the application.
 ///
 /// Returns **402 with `BILLING_REQUIRED`**, which the frontend converts into a
