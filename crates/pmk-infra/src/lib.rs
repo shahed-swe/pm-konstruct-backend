@@ -4,4 +4,9 @@
 
 //! Infrastructure adapters. The only crate that talks to the outside world.
 
+pub mod config;
 pub mod db;
+pub mod repo;
+pub mod telemetry;
+
+pub use config::Config;

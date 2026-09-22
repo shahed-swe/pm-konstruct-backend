@@ -11,10 +11,12 @@
 pub mod access;
 pub mod call_forward;
 pub mod error;
+pub mod identity;
 pub mod ids;
 pub mod job;
 pub mod tenant;
 
 pub use error::{DomainError, DomainResult};
+pub use identity::{HashKind, User};
 pub use ids::*;
 pub use tenant::CompanyId;

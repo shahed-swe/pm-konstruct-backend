@@ -11,6 +11,25 @@
 use pmk_domain::tenant::TenantScope;
 use sqlx::{Postgres, Transaction};
 
+/// Applies the tenant GUC to an open transaction.
+///
+/// `SET LOCAL` is deliberate: it is scoped to the transaction, so a pooled
+/// connection cannot leak one tenant's GUC into the next request. A bound
+/// parameter cannot be used with SET, so the value is formatted -- safe because
+/// `CompanyId` wraps an `i32` and cannot carry SQL.
+pub async fn set_tenant(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: TenantScope,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        "SET LOCAL app.company_id = '{}'",
+        scope.company_id().get()
+    ))
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 /// A transaction with the tenant GUC already applied.
 pub struct ScopedTx<'t> {
     tx: Transaction<'t, Postgres>,
@@ -67,15 +86,7 @@ where
 {
     let mut tx = pool.begin().await?;
 
-    // Bind the tenant for the life of this transaction. A bound parameter
-    // cannot be used with SET, so the value is formatted -- safe because
-    // CompanyId wraps an i32 and cannot carry SQL.
-    sqlx::query(&format!(
-        "SET LOCAL app.company_id = '{}'",
-        scope.company_id().get()
-    ))
-    .execute(&mut *tx)
-    .await?;
+    set_tenant(&mut tx, scope).await?;
 
     let mut scoped = ScopedTx { tx, scope };
     match f(&mut scoped).await {

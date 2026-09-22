@@ -27,7 +27,7 @@ async-trait  = "0.1"
 # http
 axum         = { version = "0.8", features = ["macros", "multipart"] }
 tower        = "0.5"
-tower-http   = { version = "0.6", features = ["trace", "compression-gzip", "timeout", "limit", "cors", "request-id", "util"] }
+tower-http   = { version = "0.6", features = ["trace", "compression-gzip", "timeout", "limit", "cors", "request-id", "set-header", "util"] }
 hyper        = "1.6"
 
 # db
@@ -77,6 +77,11 @@ web-push     = "0.10"
 
 # jobs
 apalis       = { version = "0.6", features = ["limit", "retry"] }
+
+# hashing / randomness
+rand         = "0.8"
+sha2         = "0.10"
+hex          = "0.4"
 
 # cli
 clap         = { version = "4", features = ["derive", "env"] }

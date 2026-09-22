@@ -10,6 +10,7 @@
 
 pub mod clock;
 pub mod error;
+pub mod repository;
 
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use error::{PortError, PortResult};

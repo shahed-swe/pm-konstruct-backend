@@ -1,3 +1,100 @@
-fn main() {
-    println!("placeholder");
+//! `pmk-api` entry point.
+
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
+use pmk_api::{build_router, AppState};
+use pmk_app::identity::{token::TokenCodec, AuthService};
+use pmk_infra::config::Config;
+use pmk_infra::db::{connect, PoolConfig};
+use pmk_infra::repo::{PgBillingRepository, PgRefreshTokenRepository, PgUserRepository};
+use pmk_infra::telemetry;
+use pmk_ports::SystemClock;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Config is validated before anything else, so a missing secret fails
+    // startup with an actionable message rather than at request time.
+    let config = Config::load()?;
+    telemetry::init(&config.telemetry);
+
+    tracing::info!(
+        port = config.server.port,
+        timezone = %config.tenancy.default_timezone,
+        "starting pmk-api"
+    );
+
+    let mut pool_cfg = PoolConfig::new(config.database.url.clone());
+    pool_cfg.max_connections = config.database.max_connections;
+    pool_cfg.min_connections = config.database.min_connections;
+    pool_cfg.acquire_timeout = std::time::Duration::from_secs(config.database.acquire_timeout_secs);
+    let pool = connect(&pool_cfg).await?;
+
+    let users = Arc::new(PgUserRepository::new(pool.clone()));
+    let refresh = Arc::new(PgRefreshTokenRepository::new(pool.clone()));
+    let billing = Arc::new(PgBillingRepository::new(pool.clone()));
+    let codec = TokenCodec::new(&config.auth.jwt_secret, config.access_ttl())?;
+    let auth = Arc::new(AuthService::new(
+        users,
+        refresh,
+        billing,
+        codec,
+        config.refresh_ttl(),
+    )?);
+
+    let state = AppState {
+        clock: Arc::new(SystemClock::new(config.timezone())),
+        config: Arc::new(config.clone()),
+        auth,
+        pool: pool.clone(),
+        ready: Arc::new(AtomicBool::new(false)),
+    };
+
+    // Readiness reflects the schema actually being present. Migrations are run
+    // out of process by `pmk-cli migrate`, not on boot: the legacy server ran
+    // ~1,100 lines of DDL at startup with no lock, so two instances booting
+    // together raced.
+    match sqlx::query("SELECT 1 FROM users LIMIT 1")
+        .execute(&pool)
+        .await
+    {
+        Ok(_) => {
+            state.mark_ready();
+            tracing::info!("schema present; serving traffic");
+        }
+        Err(e) => tracing::warn!(
+            error = %e,
+            "schema not ready -- run `pmk-cli migrate`. /readyz will report 503."
+        ),
+    }
+
+    let addr = format!("{}:{}", config.server.host, config.server.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    tracing::info!(%addr, "listening");
+
+    axum::serve(listener, build_router(state))
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    Ok(())
+}
+
+/// Drains in-flight requests on SIGTERM so a rolling deploy does not drop them.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let term = async {
+        if let Ok(mut s) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            s.recv().await;
+        }
+    };
+    #[cfg(not(unix))]
+    let term = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => tracing::info!("received SIGINT, shutting down"),
+        () = term => tracing::info!("received SIGTERM, shutting down"),
+    }
 }

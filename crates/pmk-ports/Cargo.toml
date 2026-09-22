@@ -17,3 +17,4 @@ chrono.workspace = true
 bytes = "1"
 chrono-tz.workspace = true
 anyhow.workspace = true
+uuid.workspace = true
