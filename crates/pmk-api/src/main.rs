@@ -8,8 +8,8 @@ use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
-    PgBillingRepository, PgDiaryRepository, PgJobRepository, PgJobTaskRepository,
-    PgRefreshTokenRepository, PgUserRepository,
+    PgBillingRepository, PgCallForwardRepository, PgDiaryRepository, PgJobRepository,
+    PgJobTaskRepository, PgRefreshTokenRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -46,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?);
 
     let job_repo = Arc::new(PgJobRepository::new(pool.clone()));
+    let job_repo2 = job_repo.clone();
     let jobs = Arc::new(pmk_app::jobs::JobService::new(
         job_repo.clone(),
         Arc::new(PgJobTaskRepository::new(pool.clone())),
@@ -60,12 +61,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock.clone(),
     ));
 
+    let call_forward = Arc::new(pmk_app::call_forward::CallForwardService::new(
+        Arc::new(PgCallForwardRepository::new(pool.clone())),
+        job_repo2,
+        clock.clone(),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
         auth,
         jobs,
         diary,
+        call_forward,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };

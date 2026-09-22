@@ -348,3 +348,89 @@ pub trait DiaryRepository: Send + Sync {
 pub trait WeatherProvider: Send + Sync {
     async fn current(&self, lat: f64, lon: f64) -> PortResult<WeatherStamp>;
 }
+
+// ── call forward ────────────────────────────────────────────────────────────
+
+use pmk_domain::call_forward::{CallForwardInput, CallForwardItem, ItemType};
+use pmk_domain::ids::CallForwardItemId;
+
+#[derive(Debug, Clone, Default)]
+pub struct CallForwardFilter {
+    pub job_id: Option<JobId>,
+    pub status: Option<String>,
+    pub parent_id: Option<CallForwardItemId>,
+}
+
+/// One entry of a bulk reorder.
+///
+/// `parent_id` is a *double* option on purpose: `None` means the client did not
+/// mention parentage and it must be left alone, while `Some(None)` means an
+/// explicit detach to the root. Collapsing the two silently reparents every
+/// item in a plain sort-order reorder.
+#[derive(Debug, Clone, Copy)]
+pub struct ReorderEntry {
+    pub id: CallForwardItemId,
+    pub sort_order: i32,
+    pub parent_id: Option<Option<CallForwardItemId>>,
+}
+
+#[async_trait]
+pub trait CallForwardRepository: Send + Sync {
+    async fn list(
+        &self,
+        scope: TenantScope,
+        visible_jobs: Option<&[JobId]>,
+        filter: &CallForwardFilter,
+    ) -> PortResult<Vec<CallForwardItem>>;
+
+    async fn find(
+        &self,
+        scope: TenantScope,
+        visible_jobs: Option<&[JobId]>,
+        id: CallForwardItemId,
+    ) -> PortResult<Option<CallForwardItem>>;
+
+    /// Type and job of an item, for parent validation without loading it all.
+    async fn type_and_job(
+        &self,
+        scope: TenantScope,
+        id: CallForwardItemId,
+    ) -> PortResult<Option<(ItemType, JobId)>>;
+
+    async fn create(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        input: &CallForwardInput,
+    ) -> PortResult<CallForwardItem>;
+
+    /// Creates a tree in one transaction. `local_parent` indexes into the same
+    /// slice, so a client can describe a hierarchy before any ids exist.
+    async fn create_bulk(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        items: &[(CallForwardInput, Option<usize>)],
+    ) -> PortResult<Vec<CallForwardItem>>;
+
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: CallForwardItemId,
+        input: &CallForwardInput,
+    ) -> PortResult<Option<CallForwardItem>>;
+
+    async fn delete(&self, scope: TenantScope, id: CallForwardItemId) -> PortResult<bool>;
+
+    /// Rewrites sort order and parentage for many items atomically.
+    async fn reorder(&self, scope: TenantScope, entries: &[ReorderEntry]) -> PortResult<u64>;
+
+    /// Items due to finish within `days`, for the dashboard.
+    async fn upcoming(
+        &self,
+        scope: TenantScope,
+        visible_jobs: Option<&[JobId]>,
+        from: chrono::NaiveDate,
+        days: i64,
+    ) -> PortResult<Vec<CallForwardItem>>;
+}

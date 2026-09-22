@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use pmk_app::call_forward::CallForwardService;
 use pmk_app::diary::DiaryService;
 use pmk_app::identity::AuthService;
 use pmk_app::jobs::JobService;
@@ -14,6 +15,7 @@ pub struct AppState {
     pub auth: Arc<AuthService>,
     pub jobs: Arc<JobService>,
     pub diary: Arc<DiaryService>,
+    pub call_forward: Arc<CallForwardService>,
     pub clock: Arc<dyn Clock>,
     pub pool: sqlx::PgPool,
     /// Flipped once migrations are confirmed applied. `/readyz` reports it, and

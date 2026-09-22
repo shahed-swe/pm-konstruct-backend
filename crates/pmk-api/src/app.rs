@@ -46,6 +46,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/auth", routes::auth::router())
         .nest("/jobs", routes::jobs::router())
         .nest("/site-diary", routes::diary::router())
+        .nest("/call-forward", routes::call_forward::router())
         .nest("/tasks", routes::jobs::tasks_router());
 
     Router::new()
