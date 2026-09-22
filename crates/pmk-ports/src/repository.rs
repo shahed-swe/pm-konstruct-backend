@@ -207,6 +207,25 @@ pub struct JobFilter {
     pub search: Option<String>,
 }
 
+/// A supervisor assigned to a job, as the job list carries them.
+///
+/// `user_id` is the user, not the assignment row. The legacy DTO called this
+/// field `id` while holding a user id, and the DTO still emits it under that
+/// name so the field the existing client reads keeps working.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssignedSupervisor {
+    pub user_id: UserId,
+    pub name: String,
+    pub is_primary: bool,
+}
+
+/// The people shown against a job in a list.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JobPeople {
+    pub manager_name: Option<String>,
+    pub supervisors: Vec<AssignedSupervisor>,
+}
+
 #[async_trait]
 pub trait JobRepository: Send + Sync {
     /// Jobs the caller may see.
@@ -246,6 +265,17 @@ pub trait JobRepository: Send + Sync {
     /// and scheduler allocations. Manager-only, behind an explicit flag -- see
     /// docs/adr/0002-scope-decisions.md.
     async fn purge(&self, scope: TenantScope, id: JobId) -> PortResult<bool>;
+
+    /// The manager's name and assigned supervisors for a set of jobs, keyed by job.
+    ///
+    /// One query for the whole page rather than one per row: the jobs list
+    /// shows a supervisor stack against every job, and asking per job is the
+    /// N+1 the legacy page made on every load.
+    async fn people(
+        &self,
+        scope: TenantScope,
+        ids: &[JobId],
+    ) -> PortResult<std::collections::HashMap<i32, JobPeople>>;
 
     async fn assignments(&self, scope: TenantScope, id: JobId) -> PortResult<Vec<JobAssignment>>;
 

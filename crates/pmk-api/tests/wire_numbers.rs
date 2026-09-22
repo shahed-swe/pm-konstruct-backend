@@ -1,3 +1,8 @@
+// An integration test is its own crate, so the lib's `cfg_attr(test, ...)`
+// relaxation does not reach it. A failed `unwrap` here is the assertion
+// failing, which is what we want to see.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Measurements cross the wire as JSON numbers, on every endpoint that sends one.
 //!
 //! `rust_decimal::Decimal` serialises as a *string*, which is easy to miss

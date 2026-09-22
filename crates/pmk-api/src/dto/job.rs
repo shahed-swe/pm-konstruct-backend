@@ -28,6 +28,60 @@ pub struct JobDto {
     pub contact2_email: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+
+    /// The manager's name, which the jobs page shows rather than the id.
+    ///
+    /// Null when the job has no manager, or when the manager's user row has
+    /// been deleted. Sent by the legacy under this name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manager_name: Option<String>,
+
+    /// The *first* assigned supervisor's name -- not necessarily the primary
+    /// one. That is what the legacy sent here, and the jobs page's supervisor
+    /// stack picks the primary out of `supervisors` itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supervisor_name: Option<String>,
+
+    /// Everyone assigned, oldest assignment first.
+    ///
+    /// Present on the list and the detail response, absent on a create or
+    /// update reply -- which is also what the legacy did, and why the jobs
+    /// page refetches the list after saving rather than patching it in place.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supervisors: Option<Vec<JobSupervisorDto>>,
+}
+
+/// A supervisor on a job, as the list carries them.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobSupervisorDto {
+    /// The **user's** id. Named `id` because that is the field the existing
+    /// client reads; `JobAssignment` in the domain calls it `user_id` for
+    /// the reason recorded there.
+    pub id: i32,
+    pub name: String,
+    pub is_primary: bool,
+}
+
+impl From<pmk_ports::repository::AssignedSupervisor> for JobSupervisorDto {
+    fn from(s: pmk_ports::repository::AssignedSupervisor) -> Self {
+        Self {
+            id: s.user_id.get(),
+            name: s.name,
+            is_primary: s.is_primary,
+        }
+    }
+}
+
+impl From<pmk_app::jobs::JobView> for JobDto {
+    fn from(v: pmk_app::jobs::JobView) -> Self {
+        Self {
+            manager_name: v.manager_name,
+            supervisor_name: v.supervisor_name,
+            supervisors: Some(v.supervisors.into_iter().map(Into::into).collect()),
+            ..Self::from(v.job)
+        }
+    }
 }
 
 impl From<Job> for JobDto {
@@ -53,6 +107,9 @@ impl From<Job> for JobDto {
             contact2_email: j.contact2_email,
             created_at: j.created_at,
             updated_at: j.updated_at,
+            manager_name: None,
+            supervisor_name: None,
+            supervisors: None,
         }
     }
 }
@@ -108,6 +165,118 @@ impl JobUpsertRequest {
             contact2_name: self.contact2_name,
             contact2_phone: self.contact2_phone,
             contact2_email: self.contact2_email,
+        })
+    }
+}
+
+/// A partial job update.
+///
+/// `PUT /jobs/{id}` has always been a *partial* update: the legacy service
+/// spread whatever keys arrived onto the row and left the rest alone. Several
+/// screens rely on it -- archiving from the row menu sends only `status`, the
+/// notes panel autosaves only `description`, and clearing a stale cloud link
+/// sends only `dropboxPath`. Requiring the whole job would make each of those
+/// a read-modify-write that can clobber a concurrent edit.
+///
+/// An absent key leaves the field alone. An explicit `null` clears it, which
+/// is why the nullable fields are `Option<Option<T>>` rather than `Option<T>`
+/// -- without the distinction there is no way to erase a client email.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobPatchRequest {
+    pub name: Option<String>,
+    pub job_number: Option<String>,
+    pub client: Option<String>,
+    pub address: Option<String>,
+    pub status: Option<String>,
+
+    #[serde(default, deserialize_with = "double_option")]
+    pub client_number: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub client_email: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub start_date: Option<Option<chrono::NaiveDate>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub end_date: Option<Option<chrono::NaiveDate>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub manager_id: Option<Option<i32>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub supervisor_id: Option<Option<i32>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub dropbox_path: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub description: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub contact2_name: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub contact2_phone: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub contact2_email: Option<Option<String>>,
+}
+
+/// Distinguishes "key absent" from "key present and null".
+///
+/// Without it serde collapses both to `None`, and an update that clears a
+/// field is indistinguishable from one that does not mention it.
+fn double_option<'de, D, T>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Deserialize::deserialize(de).map(Some)
+}
+
+impl JobPatchRequest {
+    /// Applies the patch to the job as it stands.
+    pub fn apply(self, current: &Job) -> Result<JobInput, pmk_domain::DomainError> {
+        let status = match self.status.as_deref() {
+            None => Some(current.status),
+            Some("") => None,
+            Some(s) => Some(JobStatus::parse(s).ok_or_else(|| {
+                pmk_domain::DomainError::invalid(
+                    "status",
+                    "must be one of active, completed, archived, on_hold",
+                )
+            })?),
+        };
+
+        Ok(JobInput {
+            name: self.name.unwrap_or_else(|| current.name.clone()),
+            job_number: self
+                .job_number
+                .unwrap_or_else(|| current.job_number.clone()),
+            client: self.client.unwrap_or_else(|| current.client.clone()),
+            address: self.address.unwrap_or_else(|| current.address.clone()),
+            status,
+            client_number: self
+                .client_number
+                .unwrap_or_else(|| current.client_number.clone()),
+            client_email: self
+                .client_email
+                .unwrap_or_else(|| current.client_email.clone()),
+            start_date: self.start_date.unwrap_or(current.start_date),
+            end_date: self.end_date.unwrap_or(current.end_date),
+            manager_id: self
+                .manager_id
+                .map_or(current.manager_id, |v| v.map(UserId)),
+            supervisor_id: self
+                .supervisor_id
+                .map_or(current.supervisor_id, |v| v.map(UserId)),
+            dropbox_path: self
+                .dropbox_path
+                .unwrap_or_else(|| current.dropbox_path.clone()),
+            description: self
+                .description
+                .unwrap_or_else(|| current.description.clone()),
+            contact2_name: self
+                .contact2_name
+                .unwrap_or_else(|| current.contact2_name.clone()),
+            contact2_phone: self
+                .contact2_phone
+                .unwrap_or_else(|| current.contact2_phone.clone()),
+            contact2_email: self
+                .contact2_email
+                .unwrap_or_else(|| current.contact2_email.clone()),
         })
     }
 }

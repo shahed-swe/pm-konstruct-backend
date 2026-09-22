@@ -10,7 +10,7 @@ use pmk_domain::access::Role;
 use pmk_domain::ids::{JobId, UserId};
 use pmk_domain::job::{Job, JobAssignment, JobInput, JobStatus};
 use pmk_domain::tenant::{CompanyId, TenantScope};
-use pmk_ports::repository::{JobFilter, JobRepository};
+use pmk_ports::repository::{AssignedSupervisor, JobFilter, JobPeople, JobRepository};
 use pmk_ports::{PortError, PortResult};
 use sqlx::{PgPool, Postgres, Transaction};
 
@@ -367,6 +367,66 @@ impl JobRepository for PgJobRepository {
             .map_err(map_sqlx)?;
         tx.commit().await.map_err(map_sqlx)?;
         Ok(r.rows_affected() > 0)
+    }
+
+    async fn people(
+        &self,
+        scope: TenantScope,
+        ids: &[JobId],
+    ) -> PortResult<std::collections::HashMap<i32, JobPeople>> {
+        use std::collections::HashMap;
+
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let raw: Vec<i32> = ids.iter().map(|i| i.get()).collect();
+        let mut tx = self.begin(scope).await?;
+
+        // The manager's name comes from the job row's own join; the
+        // supervisors from the assignment table, ordered the way the legacy
+        // ordered them, because the first one is shown as the primary when
+        // none is flagged.
+        let managers: Vec<(i32, Option<String>)> = sqlx::query_as(
+            "SELECT j.id, m.name FROM jobs j \
+             LEFT JOIN users m ON m.id = j.manager_id \
+             WHERE j.id = ANY($1)",
+        )
+        .bind(&raw)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+
+        let supervisors: Vec<(i32, i32, Option<String>, bool)> = sqlx::query_as(
+            "SELECT a.job_id, a.user_id, u.name, a.is_primary \
+             FROM job_assignments a LEFT JOIN users u ON u.id = a.user_id \
+             WHERE a.job_id = ANY($1) ORDER BY a.assigned_at ASC",
+        )
+        .bind(&raw)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+
+        tx.commit().await.map_err(map_sqlx)?;
+
+        let mut out: HashMap<i32, JobPeople> = HashMap::with_capacity(managers.len());
+        for (job_id, manager_name) in managers {
+            out.entry(job_id).or_default().manager_name = manager_name;
+        }
+        for (job_id, user_id, name, is_primary) in supervisors {
+            out.entry(job_id)
+                .or_default()
+                .supervisors
+                .push(AssignedSupervisor {
+                    user_id: UserId::new(user_id),
+                    // A deleted user leaves the join null. The legacy sent an
+                    // empty string here rather than dropping the row, so the
+                    // count of supervisors on a job stayed right.
+                    name: name.unwrap_or_default(),
+                    is_primary,
+                });
+        }
+        Ok(out)
     }
 
     async fn assignments(&self, scope: TenantScope, id: JobId) -> PortResult<Vec<JobAssignment>> {

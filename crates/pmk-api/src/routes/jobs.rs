@@ -13,7 +13,7 @@ use pmk_domain::ids::{JobId, UserId};
 
 use crate::dto::{
     AddAssignmentRequest, AssignmentDto, DeleteJobQuery, JobDto, JobLinkDto, JobLinkRequest,
-    JobListQuery, JobTaskDto, JobTaskRequest, JobUpsertRequest, TaskNotesRequest,
+    JobListQuery, JobPatchRequest, JobTaskDto, JobTaskRequest, JobUpsertRequest, TaskNotesRequest,
 };
 use crate::error::ApiError;
 use crate::extract::{JobsRead, JobsWrite, ManagerOnly, RequirePermission, RequireRole};
@@ -55,7 +55,7 @@ async fn list(
         supervisor_id: q.supervisor_id.map(UserId),
         search: q.search,
     };
-    let jobs = state.jobs.list(&session, filter).await?;
+    let jobs = state.jobs.list_with_people(&session, filter).await?;
     Ok(Json(jobs.into_iter().map(Into::into).collect()))
 }
 
@@ -64,7 +64,9 @@ async fn get_one(
     RequirePermission(session, ..): RequirePermission<JobsRead>,
     Path(id): Path<i32>,
 ) -> Result<Json<JobDto>, ApiError> {
-    Ok(Json(state.jobs.get(&session, JobId(id)).await?.into()))
+    Ok(Json(
+        state.jobs.get_with_people(&session, JobId(id)).await?.into(),
+    ))
 }
 
 async fn create(
@@ -77,15 +79,24 @@ async fn create(
     Ok((StatusCode::CREATED, Json(job.into())))
 }
 
+/// Updates a job, merging the body onto what is already stored.
+///
+/// A partial update, as the legacy was: the jobs list archives a job by
+/// sending `{"status":"archived"}` alone, and the notes panel autosaves
+/// `{"description":"..."}`. Reading the job first also means the visibility
+/// check runs before anything is written, so a supervisor cannot blind-write
+/// a job they cannot see.
 async fn update(
     State(state): State<AppState>,
     RequirePermission(session, ..): RequirePermission<JobsWrite>,
     Path(id): Path<i32>,
-    Json(req): Json<JobUpsertRequest>,
+    Json(req): Json<JobPatchRequest>,
 ) -> Result<Json<JobDto>, ApiError> {
-    let input = req.into_input()?;
+    let current = state.jobs.get(&session, JobId(id)).await?;
+    let input = req.apply(&current)?;
+    state.jobs.update(&session, JobId(id), input).await?;
     Ok(Json(
-        state.jobs.update(&session, JobId(id), input).await?.into(),
+        state.jobs.get_with_people(&session, JobId(id)).await?.into(),
     ))
 }
 

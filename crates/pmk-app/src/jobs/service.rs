@@ -4,11 +4,41 @@ use pmk_domain::ids::{JobId, UserId};
 use pmk_domain::job::{Job, JobAssignment, JobInput, JobLink, JobLinkInput};
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
-    JobFilter, JobLinkRepository, JobRepository, JobTask, JobTaskInput, JobTaskRepository,
+    AssignedSupervisor, JobFilter, JobLinkRepository, JobPeople, JobRepository, JobTask,
+    JobTaskInput, JobTaskRepository,
 };
 
 use crate::identity::SessionUser;
 use crate::{AppError, AppResult};
+
+/// A job with the people shown beside it.
+///
+/// The legacy list and detail responses carried `managerName`,
+/// `supervisorName` and a `supervisors` array alongside the job's own
+/// columns, and the jobs page renders all three. They are assembled here
+/// rather than stored on `Job`, which stays the record as the database holds
+/// it.
+#[derive(Debug, Clone)]
+pub struct JobView {
+    pub job: Job,
+    pub manager_name: Option<String>,
+    /// The first supervisor's name, which is what the legacy sent under this
+    /// name -- not necessarily the primary one.
+    pub supervisor_name: Option<String>,
+    pub supervisors: Vec<AssignedSupervisor>,
+}
+
+impl JobView {
+    fn assemble(job: Job, people: Option<JobPeople>) -> Self {
+        let people = people.unwrap_or_default();
+        Self {
+            manager_name: people.manager_name,
+            supervisor_name: people.supervisors.first().map(|s| s.name.clone()),
+            supervisors: people.supervisors,
+            job,
+        }
+    }
+}
 
 pub struct JobService {
     jobs: Arc<dyn JobRepository>,
@@ -68,6 +98,32 @@ impl JobService {
             )
             .await?
             .ok_or_else(|| AppError::Domain(DomainError::not_found("Job")))
+    }
+
+    /// The list with each job's manager and supervisors attached.
+    pub async fn list_with_people(
+        &self,
+        s: &SessionUser,
+        filter: JobFilter,
+    ) -> AppResult<Vec<JobView>> {
+        let jobs = self.list(s, filter).await?;
+        let ids: Vec<JobId> = jobs.iter().map(|j| j.id).collect();
+        let mut people = self.jobs.people(s.principal.scope(), &ids).await?;
+        Ok(jobs
+            .into_iter()
+            .map(|job| {
+                let found = people.remove(&job.id.get());
+                JobView::assemble(job, found)
+            })
+            .collect())
+    }
+
+    /// One job, with the same people attached.
+    pub async fn get_with_people(&self, s: &SessionUser, id: JobId) -> AppResult<JobView> {
+        let job = self.get(s, id).await?;
+        let mut people = self.jobs.people(s.principal.scope(), &[id]).await?;
+        let found = people.remove(&id.get());
+        Ok(JobView::assemble(job, found))
     }
 
     pub async fn create(&self, s: &SessionUser, input: JobInput) -> AppResult<Job> {
