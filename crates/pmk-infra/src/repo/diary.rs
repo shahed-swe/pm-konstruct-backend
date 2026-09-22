@@ -11,7 +11,7 @@ use pmk_domain::diary::{
 };
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId, UserId};
 use pmk_domain::tenant::TenantScope;
-use pmk_ports::repository::{DiaryFilter, DiaryRepository, WeatherSnapshot};
+use pmk_ports::repository::{DiaryContext, DiaryFilter, DiaryRepository, WeatherSnapshot};
 use pmk_ports::{PortError, PortResult};
 use rust_decimal::Decimal;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -232,6 +232,59 @@ impl DiaryRepository for PgDiaryRepository {
             .map_err(map_sqlx)?;
         tx.commit().await.map_err(map_sqlx)?;
         Ok(row.map(Into::into))
+    }
+
+    async fn context(
+        &self,
+        scope: TenantScope,
+        ids: &[DiaryEntryId],
+    ) -> PortResult<std::collections::HashMap<i32, DiaryContext>> {
+        use std::collections::HashMap;
+
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let raw: Vec<i32> = ids.iter().map(|i| i.get()).collect();
+        let mut tx = self.begin(scope).await?;
+
+        // Left joins throughout: an entry whose author has since been deleted
+        // is still an entry, and dropping the row would make it vanish from
+        // the list rather than merely lose a name.
+        let rows: Vec<(
+            i32,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = sqlx::query_as(
+            "SELECT d.id, j.name, j.job_number, j.address, u.name \
+                 FROM site_diary d \
+                 LEFT JOIN jobs j ON j.id = d.job_id \
+                 LEFT JOIN users u ON u.id = d.author_id \
+                 WHERE d.id = ANY($1)",
+        )
+        .bind(&raw)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+
+        tx.commit().await.map_err(map_sqlx)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(id, job_name, job_number, job_address, author_name)| {
+                (
+                    id,
+                    DiaryContext {
+                        job_name,
+                        job_number,
+                        job_address,
+                        author_name,
+                    },
+                )
+            })
+            .collect())
     }
 
     async fn create(

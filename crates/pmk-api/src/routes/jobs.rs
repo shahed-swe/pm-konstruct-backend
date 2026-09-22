@@ -65,7 +65,11 @@ async fn get_one(
     Path(id): Path<i32>,
 ) -> Result<Json<JobDto>, ApiError> {
     Ok(Json(
-        state.jobs.get_with_people(&session, JobId(id)).await?.into(),
+        state
+            .jobs
+            .get_with_people(&session, JobId(id))
+            .await?
+            .into(),
     ))
 }
 
@@ -96,7 +100,11 @@ async fn update(
     let input = req.apply(&current)?;
     state.jobs.update(&session, JobId(id), input).await?;
     Ok(Json(
-        state.jobs.get_with_people(&session, JobId(id)).await?.into(),
+        state
+            .jobs
+            .get_with_people(&session, JobId(id))
+            .await?
+            .into(),
     ))
 }
 

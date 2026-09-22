@@ -54,7 +54,7 @@ async fn list(
         to: q.to,
         action_status: q.action_status,
     };
-    let entries = state.diary.list(&session, filter).await?;
+    let entries = state.diary.list_with_context(&session, filter).await?;
     Ok(Json(entries.into_iter().map(Into::into).collect()))
 }
 
@@ -64,7 +64,11 @@ async fn get_one(
     Path(id): Path<i32>,
 ) -> Result<Json<DiaryEntryDto>, ApiError> {
     Ok(Json(
-        state.diary.get(&session, DiaryEntryId(id)).await?.into(),
+        state
+            .diary
+            .get_with_context(&session, DiaryEntryId(id))
+            .await?
+            .into(),
     ))
 }
 

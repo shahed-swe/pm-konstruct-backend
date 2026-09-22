@@ -370,6 +370,19 @@ pub struct DiaryFilter {
     pub action_status: Option<String>,
 }
 
+/// The job and author a diary entry belongs to, by name.
+///
+/// The diary list shows which job an entry is for and who wrote it, and the
+/// company's branding decides whether the job is named by its number, its
+/// name or its address -- so all three come along, and the client picks.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DiaryContext {
+    pub job_name: Option<String>,
+    pub job_number: Option<String>,
+    pub job_address: Option<String>,
+    pub author_name: Option<String>,
+}
+
 #[async_trait]
 pub trait DiaryRepository: Send + Sync {
     /// Entries on jobs the caller may see. `visible_jobs` is `None` for roles
@@ -387,6 +400,15 @@ pub trait DiaryRepository: Send + Sync {
         visible_jobs: Option<&[JobId]>,
         id: DiaryEntryId,
     ) -> PortResult<Option<DiaryEntry>>;
+
+    /// The job and author names for a set of entries, keyed by entry id.
+    ///
+    /// One query for the page rather than one per row.
+    async fn context(
+        &self,
+        scope: TenantScope,
+        ids: &[DiaryEntryId],
+    ) -> PortResult<std::collections::HashMap<i32, DiaryContext>>;
 
     /// Creates an entry. The weather stamp is frozen at creation and never
     /// refreshed (domain-rules R8).

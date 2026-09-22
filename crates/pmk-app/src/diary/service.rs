@@ -10,13 +10,25 @@ use pmk_domain::email::{
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId};
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
-    DiaryFilter, DiaryRepository, JobRepository, UserRepository, WeatherProvider, WeatherSnapshot,
+    DiaryContext, DiaryFilter, DiaryRepository, JobRepository, UserRepository, WeatherProvider,
+    WeatherSnapshot,
 };
 use pmk_ports::Clock;
 use pmk_ports::{BroadcastEvent, EventBus, Message};
 
 use crate::identity::SessionUser;
 use crate::{AppError, AppResult};
+
+/// An entry with the names the list shows beside it.
+///
+/// The legacy list joined the job and the author into every row, and the
+/// diary screens read all four fields: which job, under whichever of its
+/// three names the company has chosen to display, and who wrote it.
+#[derive(Debug, Clone)]
+pub struct DiaryEntryView {
+    pub entry: DiaryEntry,
+    pub context: DiaryContext,
+}
 
 pub struct DiaryService {
     diary: Arc<dyn DiaryRepository>,
@@ -89,6 +101,41 @@ impl DiaryService {
             .find(s.principal.scope(), visible.as_deref(), id)
             .await?
             .ok_or_else(|| AppError::Domain(DomainError::not_found("Diary entry")))
+    }
+
+    /// The list, with each entry's job and author named.
+    pub async fn list_with_context(
+        &self,
+        s: &SessionUser,
+        filter: DiaryFilter,
+    ) -> AppResult<Vec<DiaryEntryView>> {
+        let entries = self.list(s, filter).await?;
+        let ids: Vec<DiaryEntryId> = entries.iter().map(|e| e.id).collect();
+        let mut context = self.diary.context(s.principal.scope(), &ids).await?;
+        Ok(entries
+            .into_iter()
+            .map(|entry| {
+                let found = context.remove(&entry.id.get()).unwrap_or_default();
+                DiaryEntryView {
+                    entry,
+                    context: found,
+                }
+            })
+            .collect())
+    }
+
+    /// One entry, with the same names attached.
+    pub async fn get_with_context(
+        &self,
+        s: &SessionUser,
+        id: DiaryEntryId,
+    ) -> AppResult<DiaryEntryView> {
+        let entry = self.get(s, id).await?;
+        let mut context = self.diary.context(s.principal.scope(), &[id]).await?;
+        Ok(DiaryEntryView {
+            context: context.remove(&id.get()).unwrap_or_default(),
+            entry,
+        })
     }
 
     pub async fn create(&self, s: &SessionUser, input: DiaryEntryInput) -> AppResult<DiaryEntry> {

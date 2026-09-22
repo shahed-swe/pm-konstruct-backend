@@ -41,6 +41,33 @@ pub struct DiaryEntryDto {
     pub weather_stamp: WeatherDto,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+
+    /// The job's three names, so the client can label the entry by whichever
+    /// one the company's branding selects. Sent by the legacy under these
+    /// names; absent on a create or update reply.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_address: Option<String>,
+
+    /// Who wrote it. Null when the author's user row has been deleted; the
+    /// entry itself stays, because it is a site record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_name: Option<String>,
+}
+
+impl From<pmk_app::diary::DiaryEntryView> for DiaryEntryDto {
+    fn from(v: pmk_app::diary::DiaryEntryView) -> Self {
+        Self {
+            job_name: v.context.job_name,
+            job_number: v.context.job_number,
+            job_address: v.context.job_address,
+            author_name: v.context.author_name,
+            ..Self::from(v.entry)
+        }
+    }
 }
 
 impl From<DiaryEntry> for DiaryEntryDto {
@@ -67,6 +94,10 @@ impl From<DiaryEntry> for DiaryEntryDto {
             weather_stamp: WeatherDto::from(e.weather_stamp),
             created_at: e.created_at,
             updated_at: e.updated_at,
+            job_name: None,
+            job_number: None,
+            job_address: None,
+            author_name: None,
         }
     }
 }
