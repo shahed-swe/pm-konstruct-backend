@@ -6,3 +6,4 @@ pub mod call_forward;
 pub mod diary;
 pub mod health;
 pub mod jobs;
+pub mod media;

@@ -47,7 +47,12 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/jobs", routes::jobs::router())
         .nest("/site-diary", routes::diary::router())
         .nest("/call-forward", routes::call_forward::router())
-        .nest("/tasks", routes::jobs::tasks_router());
+        .nest("/tasks", routes::jobs::tasks_router())
+        .nest("/media", routes::media::router())
+        // Nested under their parent so the parent id is in scope; media is
+        // always reached through the entry or job that owns it.
+        .nest("/site-diary/{id}/media", routes::media::diary_router())
+        .nest("/jobs/{id}/media", routes::media::job_router());
 
     Router::new()
         .nest("/api", api)

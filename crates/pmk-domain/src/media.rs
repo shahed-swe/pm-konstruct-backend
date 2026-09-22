@@ -274,30 +274,13 @@ fn sanitise_original_name(raw: &str) -> String {
     cleaned.chars().take(255).collect()
 }
 
-/// Random v4 UUID, formatted. Kept here so `pmk-domain` does not depend on the
-/// `uuid` crate for one call.
+/// Random v4 UUID for the stored object name.
+///
+/// Uses the `uuid` crate rather than anything hand-rolled: object keys are the
+/// only thing between a leaked URL and someone else's photos, so the randomness
+/// needs to come from a CSPRNG that is someone else's job to get right.
 fn uuid_v4() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    // Deterministic in tests would be nicer, but stored names must be
-    // unguessable: object keys are the only thing between a leaked URL and
-    // someone else's photos.
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let t = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    // Mix a counter, the clock and the address of a stack local so two
-    // processes starting at the same instant do not collide.
-    let a = (t as u64) ^ n.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    let b = (t >> 64) as u64 ^ (&n as *const AtomicU64 as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    format!(
-        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
-        (a >> 32) as u32,
-        (a >> 16) as u16,
-        (a & 0x0fff) as u16,
-        ((b >> 48) as u16 & 0x3fff) | 0x8000,
-        b & 0xffff_ffff_ffff
-    )
+    uuid::Uuid::new_v4().to_string()
 }
 
 #[cfg(test)]

@@ -460,3 +460,77 @@ pub trait JobLinkRepository: Send + Sync {
     ) -> PortResult<Option<JobLink>>;
     async fn delete(&self, scope: TenantScope, id: i32) -> PortResult<bool>;
 }
+
+// ── media ───────────────────────────────────────────────────────────────────
+
+use pmk_domain::ids::MediaId;
+use pmk_domain::media::FileType;
+
+/// A stored file, from either `diary_media` or `job_media`.
+///
+/// The two tables are near-identical but differ in what they hang off: diary
+/// media belongs to an entry (and optionally a note), job media belongs
+/// directly to a job. The legacy code kept them separate so importing a photo
+/// to a job did not need a synthetic diary entry; that split is preserved.
+#[derive(Debug, Clone)]
+pub struct Media {
+    pub id: MediaId,
+    pub owner: MediaOwner,
+    pub file_type: FileType,
+    pub mime_type: String,
+    pub original_name: String,
+    pub stored_name: String,
+    pub file_size: i64,
+    pub url: String,
+    pub uploaded_by: Option<UserId>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MediaOwner {
+    Diary { entry: DiaryEntryId, note: Option<DiaryNoteId> },
+    Job { job: JobId },
+}
+
+/// What the API records once an upload is confirmed present in storage.
+#[derive(Debug, Clone)]
+pub struct MediaRecord {
+    pub owner: MediaOwner,
+    pub file_type: FileType,
+    pub mime_type: String,
+    pub original_name: String,
+    pub stored_name: String,
+    pub file_size: i64,
+    pub url: String,
+    pub uploaded_by: UserId,
+}
+
+#[async_trait]
+pub trait MediaRepository: Send + Sync {
+    async fn list_for_diary(
+        &self,
+        scope: TenantScope,
+        entry: DiaryEntryId,
+    ) -> PortResult<Vec<Media>>;
+
+    async fn list_for_job(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<Media>>;
+
+    async fn find(&self, scope: TenantScope, id: MediaId, job_media: bool)
+        -> PortResult<Option<Media>>;
+
+    async fn record(&self, scope: TenantScope, rec: &MediaRecord) -> PortResult<Media>;
+
+    /// Deletes the row and enqueues the object for removal.
+    ///
+    /// The two cannot be done atomically -- storage is not in the transaction --
+    /// so the row goes first and the object is swept by the worker. An orphaned
+    /// object costs storage; an orphaned row shows the user a broken image.
+    async fn delete(&self, scope: TenantScope, id: MediaId, job_media: bool) -> PortResult<bool>;
+
+    /// Objects awaiting deletion, oldest first.
+    async fn pending_deletions(&self, limit: i64) -> PortResult<Vec<String>>;
+
+    async fn mark_deleted(&self, stored_name: &str) -> PortResult<()>;
+
+    async fn mark_deletion_failed(&self, stored_name: &str, error: &str) -> PortResult<()>;
+}

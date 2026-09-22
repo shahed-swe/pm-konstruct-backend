@@ -2693,6 +2693,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]

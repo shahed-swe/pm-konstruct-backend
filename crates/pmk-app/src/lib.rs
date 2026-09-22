@@ -11,5 +11,6 @@ pub mod diary;
 pub mod error;
 pub mod identity;
 pub mod jobs;
+pub mod media;
 
 pub use error::{AppError, AppResult};
