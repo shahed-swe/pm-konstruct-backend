@@ -9,10 +9,11 @@ use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
-    PgBillingRepository, PgCalendarRepository, PgCallForwardRepository, PgDashboardRepository,
-    PgDiaryRepository, PgFormsRepository, PgJobLinkRepository, PgJobRepository,
-    PgJobTaskRepository, PgMediaRepository, PgNotificationRepository, PgProgressRepository,
-    PgRefreshTokenRepository, PgReportsRepository, PgSchedulerRepository, PgUserRepository,
+    PgBillingRepository, PgCalendarRepository, PgCallForwardRepository,
+    PgCallForwardTemplateRepository, PgDashboardRepository, PgDiaryRepository, PgFormsRepository,
+    PgJobLinkRepository, PgJobRepository, PgJobTaskRepository, PgMediaRepository,
+    PgNotificationRepository, PgProgressRepository, PgRefreshTokenRepository, PgReportsRepository,
+    PgSchedulerRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -83,6 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(PgCallForwardRepository::new(pool.clone())),
         job_repo2,
         clock.clone(),
+        Arc::new(PgCallForwardTemplateRepository::new(pool.clone())),
     ));
 
     let diary_repo = Arc::new(PgDiaryRepository::new(pool.clone()));

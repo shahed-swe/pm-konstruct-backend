@@ -3,6 +3,7 @@
 pub mod billing;
 pub mod calendar;
 pub mod call_forward;
+pub mod cf_template;
 pub mod dashboard;
 pub mod diary;
 pub mod forms;
@@ -20,6 +21,7 @@ pub mod user;
 pub use billing::PgBillingRepository;
 pub use calendar::PgCalendarRepository;
 pub use call_forward::PgCallForwardRepository;
+pub use cf_template::PgCallForwardTemplateRepository;
 pub use dashboard::PgDashboardRepository;
 pub use diary::PgDiaryRepository;
 pub use forms::PgFormsRepository;

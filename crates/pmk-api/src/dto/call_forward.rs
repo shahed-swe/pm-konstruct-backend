@@ -166,3 +166,88 @@ pub struct CallForwardListQuery {
 pub struct UpcomingQuery {
     pub days: Option<i64>,
 }
+
+// ── templates ───────────────────────────────────────────────────────────────
+
+use pmk_domain::call_forward::templates::{Template, TemplateItem};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateItemDto {
+    pub local_id: i32,
+    pub local_parent_id: Option<i32>,
+    pub title: String,
+    pub item_type: String,
+    pub supplier_trade: Option<String>,
+    pub sort_order: i32,
+}
+
+impl From<TemplateItem> for TemplateItemDto {
+    fn from(i: TemplateItem) -> Self {
+        Self {
+            local_id: i.local_id,
+            local_parent_id: i.local_parent_id,
+            title: i.title,
+            item_type: i.item_type,
+            supplier_trade: i.supplier_trade,
+            sort_order: i.sort_order,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateDto {
+    pub id: i32,
+    pub name: String,
+    pub description: Option<String>,
+    pub items: Vec<TemplateItemDto>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<Template> for TemplateDto {
+    fn from(t: Template) -> Self {
+        Self {
+            id: t.id.get(),
+            name: t.name,
+            description: t.description,
+            items: t.items.into_iter().map(Into::into).collect(),
+            created_at: t.created_at,
+            updated_at: t.updated_at,
+        }
+    }
+}
+
+/// A template is captured from a job, never authored by hand: that way it
+/// always reflects a programme that really existed.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTemplateRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub job_id: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameTemplateRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyTemplateRequest {
+    pub job_id: i32,
+    /// Clears the job's existing programme first. Destructive, so it is off
+    /// unless explicitly asked for.
+    #[serde(default)]
+    pub replace: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppliedDto {
+    pub applied: usize,
+}

@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+use pmk_domain::call_forward::templates::{capture, validate_items, Template};
 use pmk_domain::call_forward::{
     validate_parent, CallForwardInput, CallForwardItemWithDelay, ItemType,
 };
-use pmk_domain::ids::{CallForwardItemId, JobId};
+use pmk_domain::ids::{CallForwardItemId, CallForwardTemplateId, JobId};
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
-    CallForwardFilter, CallForwardRepository, JobRepository, ReorderEntry,
+    CallForwardFilter, CallForwardRepository, CallForwardTemplateRepository, JobRepository,
+    ReorderEntry,
 };
 use pmk_ports::Clock;
 
@@ -17,6 +19,7 @@ pub struct CallForwardService {
     items: Arc<dyn CallForwardRepository>,
     jobs: Arc<dyn JobRepository>,
     clock: Arc<dyn Clock>,
+    templates: Arc<dyn CallForwardTemplateRepository>,
 }
 
 impl std::fmt::Debug for CallForwardService {
@@ -31,8 +34,14 @@ impl CallForwardService {
         items: Arc<dyn CallForwardRepository>,
         jobs: Arc<dyn JobRepository>,
         clock: Arc<dyn Clock>,
+        templates: Arc<dyn CallForwardTemplateRepository>,
     ) -> Self {
-        Self { items, jobs, clock }
+        Self {
+            items,
+            jobs,
+            clock,
+            templates,
+        }
     }
 
     async fn visible_jobs(&self, s: &SessionUser) -> AppResult<Option<Vec<JobId>>> {
@@ -279,5 +288,109 @@ impl CallForwardService {
             }
         }
         Ok(self.items.reorder(s.principal.scope(), &entries).await?)
+    }
+}
+
+impl CallForwardService {
+    // ── templates ───────────────────────────────────────────────────────────
+
+    pub async fn templates(&self, s: &SessionUser) -> AppResult<Vec<Template>> {
+        Ok(self.templates.list(s.principal.scope()).await?)
+    }
+
+    /// Captures a job's programme as a reusable template.
+    ///
+    /// Validated before it is stored, not only when it is applied: a template
+    /// that cannot be applied is worse than a refused save, because the
+    /// failure would surface on someone else's job weeks later.
+    pub async fn create_template(
+        &self,
+        s: &SessionUser,
+        name: &str,
+        description: Option<&str>,
+        job: JobId,
+    ) -> AppResult<Template> {
+        if name.trim().is_empty() {
+            return Err(AppError::Domain(DomainError::invalid(
+                "name",
+                "a template needs a name",
+            )));
+        }
+        self.assert_job(s, job).await?;
+
+        let rows = self
+            .templates
+            .job_programme(s.principal.scope(), job)
+            .await?;
+        let items = capture(&rows);
+        validate_items(&items).map_err(AppError::Domain)?;
+
+        Ok(self
+            .templates
+            .create(s.principal.scope(), name, description, &items)
+            .await?)
+    }
+
+    /// Renames a template. Its items are not editable -- recapture instead,
+    /// so a template always reflects a programme that really existed.
+    pub async fn rename_template(
+        &self,
+        s: &SessionUser,
+        id: CallForwardTemplateId,
+        name: &str,
+        description: Option<&str>,
+    ) -> AppResult<Template> {
+        if name.trim().is_empty() {
+            return Err(AppError::Domain(DomainError::invalid(
+                "name",
+                "a template needs a name",
+            )));
+        }
+        self.templates
+            .rename(s.principal.scope(), id, name, description)
+            .await?
+            .ok_or_else(|| AppError::Domain(DomainError::not_found("Template")))
+    }
+
+    pub async fn delete_template(
+        &self,
+        s: &SessionUser,
+        id: CallForwardTemplateId,
+    ) -> AppResult<()> {
+        if self.templates.delete(s.principal.scope(), id).await? {
+            Ok(())
+        } else {
+            Err(AppError::Domain(DomainError::not_found("Template")))
+        }
+    }
+
+    /// Writes a template onto a job.
+    ///
+    /// `replace` clears the job's existing programme first. That is
+    /// destructive and deliberate -- it is how a job started from the wrong
+    /// template is corrected -- so it is off unless asked for.
+    pub async fn apply_template(
+        &self,
+        s: &SessionUser,
+        id: CallForwardTemplateId,
+        job: JobId,
+        replace: bool,
+    ) -> AppResult<usize> {
+        self.assert_job(s, job).await?;
+
+        // Validated again on the way out: a template stored before this check
+        // existed could still hold a forward reference, and applying it would
+        // silently flatten that item to the top level.
+        let template = self
+            .templates
+            .find(s.principal.scope(), id)
+            .await?
+            .ok_or_else(|| AppError::Domain(DomainError::not_found("Template")))?;
+        validate_items(&template.items).map_err(AppError::Domain)?;
+
+        Ok(self
+            .templates
+            .apply(s.principal.scope(), id, job, replace)
+            .await?)
     }
 }

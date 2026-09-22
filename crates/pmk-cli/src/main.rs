@@ -292,19 +292,22 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
     // rather than work, and completed or on-hold items are not overdue however
     // far past their date they are.
     sqlx::query(
+        // The HEADER sorts first and two tasks hang off it, so the template
+        // capture and the tree rendering both have a real hierarchy to work
+        // with -- a flat programme would exercise neither.
         "INSERT INTO call_forward
-           (id, job_id, title, item_type, est_start, est_finish, actual_finish, status, sort_order)
+           (id, job_id, title, item_type, est_start, est_finish, actual_finish, status, sort_order, parent_id)
          VALUES
-           (101, 1, 'Frame inspection',   'TASK',        CURRENT_DATE - 10, CURRENT_DATE - 3,  NULL, 'in_progress', 1),
-           (102, 1, 'Roof battens',       'TASK',        CURRENT_DATE - 20, CURRENT_DATE - 10, NULL, 'not_started', 2),
-           (103, 1, 'Window delivery',    'TASK',        CURRENT_DATE - 30, CURRENT_DATE - 20, NULL, 'in_progress', 3),
-           (104, 1, 'Slab pour',          'TASK',        CURRENT_DATE - 60, CURRENT_DATE - 40, NULL, 'not_started', 4),
-           (105, 1, 'Lock-up claim',      'STAGE_CLAIM', CURRENT_DATE - 2,  CURRENT_DATE + 5,  NULL, 'in_progress', 5),
-           (106, 1, 'Fit-off stage',      'HEADER',      NULL,              CURRENT_DATE - 50, NULL, 'not_started', 6),
-           (107, 1, 'Plumbing rough-in',  'TASK',        CURRENT_DATE - 40, CURRENT_DATE - 35, CURRENT_DATE - 34, 'completed', 7),
-           (108, 1, 'Tiling',             'TASK',        CURRENT_DATE - 40, CURRENT_DATE - 35, NULL, 'on_hold', 8),
-           (109, 2, 'Shopfront glazing',  'TASK',        CURRENT_DATE - 15, CURRENT_DATE - 9,  NULL, 'not_started', 1),
-           (110, 4, 'Rival slab',         'TASK',        CURRENT_DATE - 15, CURRENT_DATE - 9,  NULL, 'not_started', 1)
+           (106, 1, 'Fit-off stage',      'HEADER',      NULL,              CURRENT_DATE - 50, NULL, 'not_started', 0, NULL),
+           (101, 1, 'Frame inspection',   'TASK',        CURRENT_DATE - 10, CURRENT_DATE - 3,  NULL, 'in_progress', 1, 106),
+           (102, 1, 'Roof battens',       'TASK',        CURRENT_DATE - 20, CURRENT_DATE - 10, NULL, 'not_started', 2, 106),
+           (103, 1, 'Window delivery',    'TASK',        CURRENT_DATE - 30, CURRENT_DATE - 20, NULL, 'in_progress', 3, NULL),
+           (104, 1, 'Slab pour',          'TASK',        CURRENT_DATE - 60, CURRENT_DATE - 40, NULL, 'not_started', 4, NULL),
+           (105, 1, 'Lock-up claim',      'STAGE_CLAIM', CURRENT_DATE - 2,  CURRENT_DATE + 5,  NULL, 'in_progress', 5, NULL),
+           (107, 1, 'Plumbing rough-in',  'TASK',        CURRENT_DATE - 40, CURRENT_DATE - 35, CURRENT_DATE - 34, 'completed', 7, NULL),
+           (108, 1, 'Tiling',             'TASK',        CURRENT_DATE - 40, CURRENT_DATE - 35, NULL, 'on_hold', 8, NULL),
+           (109, 2, 'Shopfront glazing',  'TASK',        CURRENT_DATE - 15, CURRENT_DATE - 9,  NULL, 'not_started', 1, NULL),
+           (110, 4, 'Rival slab',         'TASK',        CURRENT_DATE - 15, CURRENT_DATE - 9,  NULL, 'not_started', 1, NULL)
          ON CONFLICT (id) DO NOTHING",
     )
     .execute(&mut *tx)

@@ -4,11 +4,12 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use pmk_domain::ids::{CallForwardItemId, JobId};
+use pmk_domain::ids::{CallForwardItemId, CallForwardTemplateId, JobId};
 
 use crate::dto::{
-    BulkCreateRequest, CallForwardDto, CallForwardListQuery, CallForwardRequest, ReorderRequest,
-    ReorderResponse, UpcomingQuery,
+    AppliedDto, ApplyTemplateRequest, BulkCreateRequest, CallForwardDto, CallForwardListQuery,
+    CallForwardRequest, CreateTemplateRequest, RenameTemplateRequest, ReorderRequest,
+    ReorderResponse, TemplateDto, UpcomingQuery,
 };
 use crate::error::ApiError;
 use crate::extract::{CallForwardRead, CallForwardWrite, RequirePermission};
@@ -16,6 +17,13 @@ use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        // Registered before `/{id}` so "templates" is never parsed as an id.
+        .route("/templates", get(templates).post(create_template))
+        .route(
+            "/templates/{id}",
+            axum::routing::patch(rename_template).delete(delete_template),
+        )
+        .route("/templates/{id}/apply", post(apply_template))
         .route("/", get(list).post(create))
         .route("/upcoming", get(upcoming))
         .route("/bulk", post(create_bulk))
@@ -139,4 +147,80 @@ async fn reorder(
         .collect();
     let updated = state.call_forward.reorder(&session, entries).await?;
     Ok(Json(ReorderResponse { updated }))
+}
+
+// ── templates ───────────────────────────────────────────────────────────────
+
+async fn templates(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<CallForwardRead>,
+) -> Result<Json<Vec<TemplateDto>>, ApiError> {
+    let list = state.call_forward.templates(&session).await?;
+    Ok(Json(list.into_iter().map(Into::into).collect()))
+}
+
+/// Captures a job's programme as a template.
+async fn create_template(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<CallForwardWrite>,
+    Json(req): Json<CreateTemplateRequest>,
+) -> Result<(StatusCode, Json<TemplateDto>), ApiError> {
+    let t = state
+        .call_forward
+        .create_template(
+            &session,
+            &req.name,
+            req.description.as_deref(),
+            JobId(req.job_id),
+        )
+        .await?;
+    Ok((StatusCode::CREATED, Json(t.into())))
+}
+
+async fn rename_template(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<CallForwardWrite>,
+    Path(id): Path<i32>,
+    Json(req): Json<RenameTemplateRequest>,
+) -> Result<Json<TemplateDto>, ApiError> {
+    let t = state
+        .call_forward
+        .rename_template(
+            &session,
+            CallForwardTemplateId(id),
+            &req.name,
+            req.description.as_deref(),
+        )
+        .await?;
+    Ok(Json(t.into()))
+}
+
+async fn delete_template(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<CallForwardWrite>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .call_forward
+        .delete_template(&session, CallForwardTemplateId(id))
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn apply_template(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<CallForwardWrite>,
+    Path(id): Path<i32>,
+    Json(req): Json<ApplyTemplateRequest>,
+) -> Result<Json<AppliedDto>, ApiError> {
+    let applied = state
+        .call_forward
+        .apply_template(
+            &session,
+            CallForwardTemplateId(id),
+            JobId(req.job_id),
+            req.replace,
+        )
+        .await?;
+    Ok(Json(AppliedDto { applied }))
 }

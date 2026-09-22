@@ -1643,3 +1643,54 @@ pub trait NotificationRepository: Send + Sync {
         users: &[UserId],
     ) -> PortResult<Vec<(UserId, PushSubscription)>>;
 }
+
+// ── call-forward templates ──────────────────────────────────────────────────
+
+use pmk_domain::call_forward::templates::{ProgrammeRow, Template, TemplateItem};
+use pmk_domain::ids::CallForwardTemplateId;
+
+#[async_trait]
+pub trait CallForwardTemplateRepository: Send + Sync {
+    async fn list(&self, scope: TenantScope) -> PortResult<Vec<Template>>;
+
+    async fn find(
+        &self,
+        scope: TenantScope,
+        id: CallForwardTemplateId,
+    ) -> PortResult<Option<Template>>;
+
+    /// The rows of a job's programme, in application order, for capture.
+    async fn job_programme(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<ProgrammeRow>>;
+
+    async fn create(
+        &self,
+        scope: TenantScope,
+        name: &str,
+        description: Option<&str>,
+        items: &[TemplateItem],
+    ) -> PortResult<Template>;
+
+    /// Renames a template. Its items are not editable -- recapture instead.
+    async fn rename(
+        &self,
+        scope: TenantScope,
+        id: CallForwardTemplateId,
+        name: &str,
+        description: Option<&str>,
+    ) -> PortResult<Option<Template>>;
+
+    async fn delete(&self, scope: TenantScope, id: CallForwardTemplateId) -> PortResult<bool>;
+
+    /// Writes a template's items onto a job, preserving the hierarchy.
+    ///
+    /// `replace` clears the job's existing programme first; otherwise the
+    /// items are appended after whatever is already there. Returns how many
+    /// rows were written.
+    async fn apply(
+        &self,
+        scope: TenantScope,
+        id: CallForwardTemplateId,
+        job: JobId,
+        replace: bool,
+    ) -> PortResult<usize>;
+}
