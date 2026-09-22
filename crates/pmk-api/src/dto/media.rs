@@ -82,21 +82,27 @@ pub struct MediaDto {
     pub file_size: i64,
     pub uploaded_by: Option<i32>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+
+    /// Where the browser fetches the bytes: a same-origin path this API
+    /// serves, not the object key and not a signed URL.
+    pub url: String,
 }
 
 impl From<Media> for MediaDto {
     fn from(m: Media) -> Self {
-        // The object key is deliberately not exposed: clients fetch a
-        // short-lived signed URL from the download endpoint instead, so a URL
-        // captured from a response cannot be replayed indefinitely.
+        // The object key is deliberately not exposed. `url` below is a path
+        // on this API, which redirects to a freshly signed URL and re-checks
+        // the caller, so nothing captured from a response can be replayed
+        // indefinitely or read by someone who has lost access.
         let (entry, note, job) = match m.owner {
             MediaOwner::Diary { entry, note } => {
                 (Some(entry.get()), note.map(DiaryNoteId::get), None)
             }
             MediaOwner::Job { job } => (None, None, Some(job.get())),
         };
+        let id = m.id.get();
         Self {
-            id: m.id.get(),
+            id,
             diary_entry_id: entry,
             note_id: note,
             job_id: job,
@@ -107,7 +113,22 @@ impl From<Media> for MediaDto {
             file_size: m.file_size,
             uploaded_by: m.uploaded_by.map(UserId::get),
             created_at: m.created_at,
+            url: content_path(id, job.is_some()),
         }
+    }
+}
+
+/// Where the browser can fetch the bytes.
+///
+/// A stable same-origin path rather than a signed URL, because a signed URL
+/// expires within the hour and this one is rendered into an `<img src>` that
+/// may sit on a page all afternoon. The route redirects to a freshly signed
+/// URL on each request, and re-checks who is asking.
+fn content_path(id: i32, job_media: bool) -> String {
+    if job_media {
+        format!("/api/media/{id}/content?jobMedia=true")
+    } else {
+        format!("/api/media/{id}/content")
     }
 }
 
@@ -155,6 +176,7 @@ pub struct JobFileDto {
 
 impl From<JobFile> for JobFileDto {
     fn from(f: JobFile) -> Self {
+        let is_form = f.file_type == "form";
         Self {
             id: f.id,
             file_type: f.file_type,
@@ -162,7 +184,14 @@ impl From<JobFile> for JobFileDto {
             original_name: f.original_name,
             stored_name: f.stored_name,
             file_size: f.file_size,
-            url: f.url,
+            // A form row is a synthesised link to the inspection page, and
+            // already a real path. A document row carries the object's
+            // storage key, which is not something a browser can fetch.
+            url: if is_form {
+                f.url
+            } else {
+                content_path(f.id, true)
+            },
             created_at: f.created_at,
             uploader_name: f.uploader_name,
         }

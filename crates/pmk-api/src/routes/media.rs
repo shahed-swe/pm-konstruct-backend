@@ -46,6 +46,7 @@ pub fn job_router() -> Router<AppState> {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/{id}/url", get(download_url))
+        .route("/{id}/content", get(content))
         .route("/{id}", delete(remove))
 }
 
@@ -161,6 +162,54 @@ async fn download_url(
         .download_url(&session, MediaId(id), q.job_media)
         .await?;
     Ok(Json(DownloadUrlDto { url }))
+}
+
+/// Serves the file itself, by redirecting to a freshly signed URL.
+///
+/// This is what a page puts in an `<img src>` or an `<a href>`. A signed URL
+/// could not be: it expires within the hour, and a gallery left open over
+/// lunch would come back to a grid of broken images. The redirect also means
+/// the bytes never pass through this service.
+///
+/// Access is re-checked on every request, so a link shared with someone who
+/// has since been removed from the job stops working -- which a signed URL
+/// pasted into a chat would not.
+///
+/// `no-store` on the redirect itself: the *target* is short-lived and
+/// caching this response would hand out an expired URL later. The image the
+/// browser then fetches is cached by the storage layer's own headers.
+async fn content(
+    State(state): State<AppState>,
+    crate::extract::Entitled(session): crate::extract::Entitled,
+    Path(id): Path<i32>,
+    Query(q): Query<MediaScopeQuery>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let url = state
+        .media
+        .download_url(&session, MediaId(id), q.job_media)
+        .await?;
+
+    let location = axum::http::HeaderValue::from_str(&url).map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "The storage service returned a URL that cannot be sent as a header",
+        )
+    })?;
+
+    Ok((
+        StatusCode::FOUND,
+        [
+            (header::LOCATION, location),
+            (
+                header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("no-store"),
+            ),
+        ],
+    )
+        .into_response())
 }
 
 async fn remove(
