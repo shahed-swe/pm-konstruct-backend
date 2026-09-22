@@ -350,9 +350,57 @@ pub fn object_key(company_id: i32, entity: &str, entity_id: i32, stored_name: &s
     format!("{company_id}/{entity}/{entity_id}/{stored_name}")
 }
 
+/// May this user delete media somebody else uploaded?
+///
+/// Office staff may remove only their own uploads. Managers and supervisors
+/// run the site and may remove anyone's -- a photo of defective work is not
+/// the photographer's property to keep.
+///
+/// The legacy code applied this by passing the uploader id only when the role
+/// was OFFICE; expressing it as a rule keeps the condition in one place and
+/// out of three separate call sites.
+#[must_use]
+pub fn may_delete_media(
+    role: crate::access::Role,
+    viewer: crate::ids::UserId,
+    uploaded_by: Option<crate::ids::UserId>,
+) -> bool {
+    if role != crate::access::Role::Office {
+        return true;
+    }
+    // An upload with no recorded uploader predates the column. Office staff
+    // cannot claim it, because there is nothing to match them against.
+    uploaded_by == Some(viewer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::access::Role;
+    use crate::ids::UserId;
+
+    #[test]
+    fn office_staff_may_only_delete_their_own_uploads() {
+        let me = UserId(4);
+        assert!(may_delete_media(Role::Office, me, Some(me)));
+        assert!(!may_delete_media(Role::Office, me, Some(UserId(2))));
+    }
+
+    #[test]
+    fn office_staff_cannot_claim_an_upload_with_no_uploader() {
+        // A row predating the column has nobody to match against, so it stays
+        // out of reach rather than becoming deletable by everyone.
+        assert!(!may_delete_media(Role::Office, UserId(4), None));
+    }
+
+    #[test]
+    fn managers_and_supervisors_may_delete_anyones() {
+        for role in [Role::Manager, Role::Supervisor] {
+            assert!(may_delete_media(role, UserId(1), Some(UserId(99))));
+            assert!(may_delete_media(role, UserId(1), None));
+        }
+    }
 
     fn req(mime: &str, size: u64) -> UploadRequest {
         UploadRequest {

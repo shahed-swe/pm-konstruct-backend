@@ -9,6 +9,7 @@ use pmk_app::forms::FormsService;
 use pmk_app::identity::AuthService;
 use pmk_app::jobs::JobService;
 use pmk_app::media::MediaService;
+use pmk_app::progress::ProgressService;
 use pmk_app::scheduler::SchedulerService;
 use pmk_infra::Config;
 use pmk_ports::Clock;
@@ -24,6 +25,7 @@ pub struct AppState {
     pub scheduler: Arc<SchedulerService>,
     pub forms: Arc<FormsService>,
     pub dashboard: Arc<DashboardService>,
+    pub progress: Arc<ProgressService>,
     pub clock: Arc<dyn Clock>,
     pub pool: sqlx::PgPool,
     /// Flipped once migrations are confirmed applied. `/readyz` reports it, and

@@ -14,6 +14,7 @@ pub mod forms;
 pub mod identity;
 pub mod jobs;
 pub mod media;
+pub mod progress;
 pub mod scheduler;
 
 pub use error::{AppError, AppResult};

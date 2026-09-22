@@ -6,7 +6,8 @@ use pmk_domain::media::{
 };
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
-    DiaryRepository, JobRepository, Media, MediaOwner, MediaRecord, MediaRepository,
+    BulkDeletePlan, DiaryRepository, JobFile, JobRepository, Media, MediaOwner, MediaRecord,
+    MediaRepository, MediaSelection,
 };
 use pmk_ports::ObjectStore;
 
@@ -211,6 +212,30 @@ impl MediaService {
         Ok(self.store.presign_get(&media.url).await?.url)
     }
 
+    /// The job's Files tab.
+    pub async fn job_files(&self, s: &SessionUser, job: JobId) -> AppResult<Vec<JobFile>> {
+        self.assert_job_access(s, job).await?;
+        Ok(self.media.job_files(s.principal.scope(), job).await?)
+    }
+
+    /// Clears several selected photos from a job's gallery.
+    ///
+    /// Office staff are restricted to their own uploads by passing their id
+    /// down as the filter; every other role passes `None`.
+    pub async fn delete_selected(
+        &self,
+        s: &SessionUser,
+        job: JobId,
+        selections: &[MediaSelection],
+    ) -> AppResult<BulkDeletePlan> {
+        self.assert_job_access(s, job).await?;
+        let restrict_to = (s.user.role == pmk_domain::access::Role::Office).then_some(s.user.id);
+        Ok(self
+            .media
+            .delete_many(s.principal.scope(), job, selections, restrict_to)
+            .await?)
+    }
+
     pub async fn delete(&self, s: &SessionUser, id: MediaId, job_media: bool) -> AppResult<()> {
         let media = self
             .media
@@ -221,6 +246,15 @@ impl MediaService {
         match media.owner {
             MediaOwner::Diary { entry, .. } => self.assert_diary_access(s, entry).await?,
             MediaOwner::Job { job } => self.assert_job_access(s, job).await?,
+        }
+
+        // Office staff may remove only their own uploads. Reaching the job at
+        // all is not enough: a photo of defective work is evidence, and the
+        // office is not the party that decides it goes away.
+        if !pmk_domain::media::may_delete_media(s.user.role, s.user.id, media.uploaded_by) {
+            return Err(AppError::Domain(DomainError::Forbidden(
+                "You can only delete photos you uploaded",
+            )));
         }
 
         // The row goes now; the object is swept by the worker. The two cannot

@@ -12,11 +12,11 @@ use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId, MediaId};
 use pmk_ports::repository::MediaOwner;
 
 use crate::dto::{
-    ConfirmUploadRequest, DownloadUrlDto, MediaDto, MediaScopeQuery, PrepareUploadRequest,
-    PreparedUploadDto,
+    BulkDeleteDto, BulkDeleteRequest, ConfirmUploadRequest, DownloadUrlDto, JobFileDto, MediaDto,
+    MediaScopeQuery, PrepareUploadRequest, PreparedUploadDto,
 };
 use crate::error::ApiError;
-use crate::extract::{JobsRead, JobsWrite, RequirePermission, SiteDiaryRead, SiteDiaryWrite};
+use crate::extract::{JobsRead, RequirePermission, SiteDiaryRead, SiteDiaryWrite};
 use crate::state::AppState;
 
 /// Mounted under `/site-diary/{id}/media`.
@@ -28,9 +28,16 @@ pub fn diary_router() -> Router<AppState> {
 }
 
 /// Mounted under `/jobs/{id}/media`.
+///
+/// Reading needs `jobs:read`; writing needs `site-diary:write`, not
+/// `jobs:write`. That looks inconsistent and it is what the contract says
+/// (`docs/contract/rbac-matrix.csv`, routes/jobs.ts:154): a job photo is site
+/// evidence, so the people who record site evidence own it. Supervisors hold
+/// `site-diary:write` by default and `jobs:write` by exception, so gating
+/// uploads on `jobs:write` would stop the primary users of the feature.
 pub fn job_router() -> Router<AppState> {
     Router::new()
-        .route("/", get(list_job_media))
+        .route("/", get(list_job_media).delete(delete_selected))
         .route("/prepare", post(prepare_job_upload))
         .route("/confirm", post(confirm_job_upload))
 }
@@ -107,7 +114,7 @@ async fn list_job_media(
 
 async fn prepare_job_upload(
     State(state): State<AppState>,
-    RequirePermission(session, ..): RequirePermission<JobsWrite>,
+    RequirePermission(session, ..): RequirePermission<SiteDiaryWrite>,
     Path(id): Path<i32>,
     Json(req): Json<PrepareUploadRequest>,
 ) -> Result<Json<Vec<PreparedUploadDto>>, ApiError> {
@@ -119,7 +126,7 @@ async fn prepare_job_upload(
 
 async fn confirm_job_upload(
     State(state): State<AppState>,
-    RequirePermission(session, ..): RequirePermission<JobsWrite>,
+    RequirePermission(session, ..): RequirePermission<SiteDiaryWrite>,
     Path(id): Path<i32>,
     Json(req): Json<ConfirmUploadRequest>,
 ) -> Result<(StatusCode, Json<MediaDto>), ApiError> {
@@ -167,4 +174,78 @@ async fn remove(
         .delete(&session, MediaId(id), q.job_media)
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The most photos one request may clear.
+///
+/// The legacy cap. It bounds the row lock the delete takes, so one request
+/// cannot hold a large part of a busy job's gallery.
+const MAX_BULK_DELETE: usize = 100;
+
+/// Clears selected photos from a job's gallery.
+///
+/// All or nothing: if any selection is missing the whole request is a 404, and
+/// if any is forbidden it is a 403. A partial delete would leave the user
+/// unable to tell which of their selections survived.
+async fn delete_selected(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<SiteDiaryWrite>,
+    Path(id): Path<i32>,
+    Json(req): Json<BulkDeleteRequest>,
+) -> Result<Json<BulkDeleteDto>, ApiError> {
+    if req.media.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Select at least one photo to delete.",
+        ));
+    }
+    if req.media.len() > MAX_BULK_DELETE {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("You can delete up to {MAX_BULK_DELETE} photos at a time."),
+        ));
+    }
+
+    // Duplicates in the payload would otherwise be counted twice in the
+    // response and locked twice in the delete.
+    let mut seen = std::collections::HashSet::new();
+    let selections: Vec<_> = req
+        .media
+        .into_iter()
+        .map(Into::into)
+        .filter(|s| seen.insert(*s))
+        .collect();
+
+    let plan = state
+        .media
+        .delete_selected(&session, JobId(id), &selections)
+        .await?;
+
+    if !plan.missing.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "One or more selected photos no longer exist.",
+        ));
+    }
+    if !plan.forbidden.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "You can only delete photos you uploaded.",
+        ));
+    }
+
+    Ok(Json(BulkDeleteDto {
+        deleted: plan.deleted.len(),
+        cleanup_pending: !plan.deleted.is_empty(),
+    }))
+}
+
+/// The job's Files tab: uploaded documents plus inspection drafts.
+pub async fn job_files(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<JobsRead>,
+    Path(id): Path<i32>,
+) -> Result<Json<Vec<JobFileDto>>, ApiError> {
+    let files = state.media.job_files(&session, JobId(id)).await?;
+    Ok(Json(files.into_iter().map(Into::into).collect()))
 }

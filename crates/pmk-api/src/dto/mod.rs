@@ -10,6 +10,7 @@ pub mod diary;
 pub mod forms;
 pub mod job;
 pub mod media;
+pub mod progress;
 pub mod scheduler;
 
 pub use auth::*;
@@ -19,4 +20,5 @@ pub use diary::*;
 pub use forms::*;
 pub use job::*;
 pub use media::*;
+pub use progress::*;
 pub use scheduler::*;

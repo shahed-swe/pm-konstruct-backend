@@ -232,6 +232,23 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
     .execute(&mut *tx)
     .await?;
 
+    // Tom Nguyen is the other half of R5: the sentinel *plus* grants, so his
+    // stored permissions actually take effect. He is OFFICE with
+    // site-diary:write, which no other fixture provides -- without him the
+    // rule that office staff may delete only their own uploads is unreachable
+    // over HTTP, because every other office user is stopped by the permission
+    // gate first.
+    sqlx::query(
+        "INSERT INTO user_permissions (user_id, resource, action)
+         VALUES (5, 'access-rules', 'managed'),
+                (5, 'site-diary', 'read'),
+                (5, 'site-diary', 'write'),
+                (5, 'jobs', 'read')
+         ON CONFLICT DO NOTHING",
+    )
+    .execute(&mut *tx)
+    .await?;
+
     sqlx::query(
         // Dates are relative to CURRENT_DATE so the calendar always has
         // something in the current month. Job 2 is deliberately open-ended

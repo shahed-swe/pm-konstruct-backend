@@ -10,8 +10,8 @@ use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
     PgBillingRepository, PgCalendarRepository, PgCallForwardRepository, PgDashboardRepository,
     PgDiaryRepository, PgFormsRepository, PgJobLinkRepository, PgJobRepository,
-    PgJobTaskRepository, PgMediaRepository, PgRefreshTokenRepository, PgSchedulerRepository,
-    PgUserRepository,
+    PgJobTaskRepository, PgMediaRepository, PgProgressRepository, PgRefreshTokenRepository,
+    PgSchedulerRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -53,6 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let job_repo4 = job_repo.clone();
     let job_repo5 = job_repo.clone();
     let job_repo6 = job_repo.clone();
+    let job_repo7 = job_repo.clone();
     let jobs = Arc::new(pmk_app::jobs::JobService::new(
         job_repo.clone(),
         Arc::new(PgJobTaskRepository::new(pool.clone())),
@@ -104,6 +105,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock.clone(),
     ));
 
+    let progress = Arc::new(pmk_app::progress::ProgressService::new(
+        Arc::new(PgProgressRepository::new(pool.clone())),
+        job_repo7,
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -115,6 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         scheduler,
         forms,
         dashboard,
+        progress,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };

@@ -133,3 +133,78 @@ pub struct MediaScopeQuery {
 pub fn media_id(raw: i32) -> MediaId {
     MediaId(raw)
 }
+
+// ── the job Files tab ───────────────────────────────────────────────────────
+
+use pmk_ports::repository::{JobFile, MediaSelection};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobFileDto {
+    pub id: i32,
+    pub file_type: String,
+    pub mime_type: String,
+    pub original_name: String,
+    /// `inspection-form:{id}` for a draft, a UUID filename for a document.
+    pub stored_name: String,
+    pub file_size: i64,
+    pub url: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub uploader_name: Option<String>,
+}
+
+impl From<JobFile> for JobFileDto {
+    fn from(f: JobFile) -> Self {
+        Self {
+            id: f.id,
+            file_type: f.file_type,
+            mime_type: f.mime_type,
+            original_name: f.original_name,
+            stored_name: f.stored_name,
+            file_size: f.file_size,
+            url: f.url,
+            created_at: f.created_at,
+            uploader_name: f.uploader_name,
+        }
+    }
+}
+
+/// One entry of a bulk delete request.
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaSelectionRequest {
+    /// `job` or `diary`. A job's gallery shows both.
+    pub source: MediaSource,
+    pub id: i32,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MediaSource {
+    Job,
+    Diary,
+}
+
+impl From<MediaSelectionRequest> for MediaSelection {
+    fn from(r: MediaSelectionRequest) -> Self {
+        Self {
+            job_media: r.source == MediaSource::Job,
+            id: pmk_domain::ids::MediaId(r.id),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkDeleteRequest {
+    pub media: Vec<MediaSelectionRequest>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkDeleteDto {
+    pub deleted: usize,
+    /// True when objects are queued for the sweeper, which the UI shows as
+    /// "removing…" until the worker catches up.
+    pub cleanup_pending: bool,
+}

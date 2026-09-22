@@ -548,6 +548,23 @@ pub trait MediaRepository: Send + Sync {
     async fn mark_deleted(&self, stored_name: &str) -> PortResult<()>;
 
     async fn mark_deletion_failed(&self, stored_name: &str, error: &str) -> PortResult<()>;
+
+    /// The job's Files tab: uploaded documents plus inspection drafts.
+    async fn job_files(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<JobFile>>;
+
+    /// Deletes several media rows on one job, all or nothing.
+    ///
+    /// `uploaded_by` restricts the caller to their own uploads; `None` means
+    /// no restriction. Nothing is deleted if any selection is missing or
+    /// forbidden -- a partial delete would leave the user unable to tell what
+    /// went and what did not.
+    async fn delete_many(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        selections: &[MediaSelection],
+        uploaded_by: Option<UserId>,
+    ) -> PortResult<BulkDeletePlan>;
 }
 
 // ── trade scheduler ─────────────────────────────────────────────────────────
@@ -1099,4 +1116,81 @@ pub trait CalendarRepository: Send + Sync {
         scope: TenantScope,
         jobs: &JobScope,
     ) -> PortResult<Vec<CalendarFilterSupervisor>>;
+}
+
+// ── progress ────────────────────────────────────────────────────────────────
+
+use pmk_domain::ids::ProgressId;
+use pmk_domain::progress::{Progress, ProgressInput};
+
+#[async_trait]
+pub trait ProgressRepository: Send + Sync {
+    /// Records for the jobs in scope, oldest date first.
+    ///
+    /// `job` narrows to one job, which the caller has already checked they
+    /// can see.
+    async fn list(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        job: Option<JobId>,
+    ) -> PortResult<Vec<Progress>>;
+
+    async fn find(&self, scope: TenantScope, id: ProgressId) -> PortResult<Option<Progress>>;
+
+    async fn create(&self, scope: TenantScope, input: &ProgressInput) -> PortResult<Progress>;
+
+    /// Updates everything but `job_id`.
+    ///
+    /// A record belongs to the job it was raised against; moving it to another
+    /// job would rewrite that job's history, so the field is not updatable.
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: ProgressId,
+        input: &ProgressInput,
+    ) -> PortResult<Option<Progress>>;
+
+    async fn delete(&self, scope: TenantScope, id: ProgressId) -> PortResult<bool>;
+}
+
+// ── job files ───────────────────────────────────────────────────────────────
+
+/// A row of the job's Files tab.
+///
+/// Two very different things share this shape: uploaded documents, and
+/// inspection drafts, which are not files at all but are listed beside them so
+/// the tab shows everything attached to the job. The synthetic rows carry a
+/// `stored_name` of `inspection-form:{id}` and a zero size, which is how the
+/// legacy UI tells them apart.
+#[derive(Debug, Clone)]
+pub struct JobFile {
+    pub id: i32,
+    pub file_type: String,
+    pub mime_type: String,
+    pub original_name: String,
+    pub stored_name: String,
+    pub file_size: i64,
+    pub url: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub uploader_name: Option<String>,
+}
+
+/// One item in a bulk media delete.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MediaSelection {
+    /// `true` for `job_media`, `false` for `diary_media`.
+    pub job_media: bool,
+    pub id: MediaId,
+}
+
+/// What a bulk delete found before deciding whether to proceed.
+#[derive(Debug, Clone, Default)]
+pub struct BulkDeletePlan {
+    /// Selections with no matching row on this job.
+    pub missing: Vec<MediaSelection>,
+    /// Rows the caller may not remove.
+    pub forbidden: Vec<MediaSelection>,
+    /// Rows that were deleted, with the objects queued for sweeping.
+    pub deleted: Vec<MediaSelection>,
 }

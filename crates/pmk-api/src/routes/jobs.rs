@@ -23,6 +23,8 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list).post(create))
         .route("/{id}", get(get_one).put(update).delete(remove))
+        // The Files tab lives with job media, so its handler does too.
+        .route("/{id}/files", get(crate::routes::media::job_files))
         .route("/{id}/assignments", get(assignments).post(add_assignment))
         .route("/{id}/assignments/{user_id}", delete(remove_assignment))
         .route("/{id}/assignments/{user_id}/primary", put(set_primary))
