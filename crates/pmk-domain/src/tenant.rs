@@ -18,20 +18,27 @@
 use crate::ids::UserId;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
-         serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(transparent)]
 pub struct CompanyId(pub i32);
 
 impl CompanyId {
     #[must_use]
-    pub const fn new(v: i32) -> Self { Self(v) }
+    pub const fn new(v: i32) -> Self {
+        Self(v)
+    }
     #[must_use]
-    pub const fn get(self) -> i32 { self.0 }
+    pub const fn get(self) -> i32 {
+        self.0
+    }
 }
 
 impl fmt::Display for CompanyId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 /// A caller whose token has been verified. Produced only by the API layer's
@@ -54,16 +61,32 @@ impl AuthenticatedPrincipal {
     /// the user from the database.
     #[must_use]
     pub fn new(user_id: UserId, company_id: CompanyId, role: crate::access::Role) -> Self {
-        Self { user_id, company_id, role, _seal: Sealed }
+        Self {
+            user_id,
+            company_id,
+            role,
+            _seal: Sealed,
+        }
     }
 
-    #[must_use] pub const fn user_id(&self) -> UserId { self.user_id }
-    #[must_use] pub const fn company_id(&self) -> CompanyId { self.company_id }
-    #[must_use] pub const fn role(&self) -> crate::access::Role { self.role }
+    #[must_use]
+    pub const fn user_id(&self) -> UserId {
+        self.user_id
+    }
+    #[must_use]
+    pub const fn company_id(&self) -> CompanyId {
+        self.company_id
+    }
+    #[must_use]
+    pub const fn role(&self) -> crate::access::Role {
+        self.role
+    }
 
     /// The tenant scope for this principal. There is no other way to get one.
     #[must_use]
-    pub const fn scope(&self) -> TenantScope { TenantScope(self.company_id) }
+    pub const fn scope(&self) -> TenantScope {
+        TenantScope(self.company_id)
+    }
 }
 
 /// Proof that a query is tenant-scoped.
@@ -75,7 +98,9 @@ pub struct TenantScope(CompanyId);
 
 impl TenantScope {
     #[must_use]
-    pub const fn company_id(self) -> CompanyId { self.0 }
+    pub const fn company_id(self) -> CompanyId {
+        self.0
+    }
 
     /// Escape hatch for the worker and CLI, which are legitimately
     /// cross-tenant (billing webhook delivery, media GC). Named to be
@@ -87,7 +112,9 @@ impl TenantScope {
 }
 
 impl fmt::Display for TenantScope {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "company={}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "company={}", self.0)
+    }
 }
 
 #[cfg(test)]

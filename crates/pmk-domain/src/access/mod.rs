@@ -3,9 +3,8 @@
 //! Ported exactly from `services/permissionsService.ts`, including the
 //! `access-rules:managed` sentinel, whose semantics are subtle:
 //!
-//!   * sentinel **absent**  -> stored grants are ignored entirely; role
-//!                             defaults apply
-//!   * sentinel **present** -> stored grants apply verbatim, minus the sentinel
+//! * sentinel **absent** -> stored grants are ignored entirely; role defaults apply
+//! * sentinel **present** -> stored grants apply verbatim, minus the sentinel
 //!
 //! So a user granted `jobs:read` with no sentinel does not get it *from that
 //! row* — they get it from the defaults, coincidentally. Revoking it changes
@@ -18,8 +17,9 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
-         serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Role {
     Manager,
@@ -72,8 +72,9 @@ impl fmt::Display for Role {
 }
 
 /// A `resource:action` grant, e.g. `site-diary:write`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash,
-         serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Permission {
     pub resource: String,
     pub action: String,
@@ -81,7 +82,10 @@ pub struct Permission {
 
 impl Permission {
     pub fn new(resource: impl Into<String>, action: impl Into<String>) -> Self {
-        Self { resource: resource.into(), action: action.into() }
+        Self {
+            resource: resource.into(),
+            action: action.into(),
+        }
     }
 
     /// Parses `"resource:action"`. Rejects empty halves and extra colons.
@@ -181,7 +185,10 @@ pub fn has_permission(role: Role, stored: &[Permission], resource: &str, action:
 #[must_use]
 pub fn mark_managed(mut permissions: Vec<Permission>) -> Vec<Permission> {
     if !permissions.iter().any(is_managed_marker) {
-        permissions.push(Permission::new(MANAGED_MARKER_RESOURCE, MANAGED_MARKER_ACTION));
+        permissions.push(Permission::new(
+            MANAGED_MARKER_RESOURCE,
+            MANAGED_MARKER_ACTION,
+        ));
     }
     permissions
 }
@@ -209,12 +216,22 @@ mod tests {
     fn supervisor_without_sentinel_gets_supervisor_defaults() {
         let eff = effective_permissions(Role::Supervisor, &[]);
         assert_eq!(eff.len(), 8, "5 view + 3 write");
-        for k in ["jobs:read", "site-diary:read", "call-forward:read", "reports:read",
-                  "trade-scheduler:read", "site-diary:write", "call-forward:write",
-                  "trade-scheduler:write"] {
+        for k in [
+            "jobs:read",
+            "site-diary:read",
+            "call-forward:read",
+            "reports:read",
+            "trade-scheduler:read",
+            "site-diary:write",
+            "call-forward:write",
+            "trade-scheduler:write",
+        ] {
             assert!(eff.contains(&p(k)), "missing {k}");
         }
-        assert!(!eff.contains(&p("jobs:write")), "supervisors do not write jobs by default");
+        assert!(
+            !eff.contains(&p("jobs:write")),
+            "supervisors do not write jobs by default"
+        );
     }
 
     #[test]
@@ -244,8 +261,16 @@ mod tests {
     #[test]
     fn sentinel_with_no_grants_removes_all_access() {
         let eff = effective_permissions(Role::Supervisor, &[marker()]);
-        assert!(eff.is_empty(), "managed with zero grants means nothing allowed");
-        assert!(!has_permission(Role::Supervisor, &[marker()], "jobs", "read"));
+        assert!(
+            eff.is_empty(),
+            "managed with zero grants means nothing allowed"
+        );
+        assert!(!has_permission(
+            Role::Supervisor,
+            &[marker()],
+            "jobs",
+            "read"
+        ));
     }
 
     #[test]
@@ -255,7 +280,10 @@ mod tests {
         assert_eq!(eff.len(), 2);
         assert!(eff.contains(&p("jobs:read")));
         assert!(eff.contains(&p("jobs:write")));
-        assert!(!eff.iter().any(is_managed_marker), "marker must not leak out");
+        assert!(
+            !eff.iter().any(is_managed_marker),
+            "marker must not leak out"
+        );
         // Defaults no longer apply once managed.
         assert!(!eff.contains(&p("site-diary:read")));
     }

@@ -1,3 +1,7 @@
+// unwrap/expect are denied in production code by the workspace lints; tests may
+// use them so a failure points at the assertion rather than an error path.
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 //! Pure domain logic for PM Konstruct. No I/O, no async, no database.
 //!
 //! Everything here is a deterministic function of its inputs, which is what

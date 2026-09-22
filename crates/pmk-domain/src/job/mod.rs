@@ -7,7 +7,12 @@ use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum JobStatus { Active, Completed, Archived, OnHold }
+pub enum JobStatus {
+    Active,
+    Completed,
+    Archived,
+    OnHold,
+}
 
 impl JobStatus {
     /// Constrained in the database by `jobs_status_check` (migration 0003).
@@ -24,8 +29,10 @@ impl JobStatus {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Active => "active", Self::Completed => "completed",
-            Self::Archived => "archived", Self::OnHold => "on_hold",
+            Self::Active => "active",
+            Self::Completed => "completed",
+            Self::Archived => "archived",
+            Self::OnHold => "on_hold",
         }
     }
 }
@@ -44,11 +51,7 @@ impl JobVisibility {
     /// R3. Note this takes the *already-resolved* id sets rather than querying:
     /// the rule stays pure and testable, and the repository owns the SQL.
     #[must_use]
-    pub fn resolve(
-        role: Role,
-        assigned: &[JobId],
-        primary_supervisor_of: &[JobId],
-    ) -> Self {
+    pub fn resolve(role: Role, assigned: &[JobId], primary_supervisor_of: &[JobId]) -> Self {
         if role.sees_all_company_jobs() {
             return Self::AllInCompany;
         }
@@ -84,9 +87,7 @@ impl JobVisibility {
 /// none. The legacy field was misleadingly called `id` while holding a user id
 /// — here the type says what it is.
 #[must_use]
-pub fn primary_supervisor(
-    assignments_by_assigned_at: &[(UserId, bool)],
-) -> Option<UserId> {
+pub fn primary_supervisor(assignments_by_assigned_at: &[(UserId, bool)]) -> Option<UserId> {
     assignments_by_assigned_at
         .iter()
         .find(|(_, is_primary)| *is_primary)
@@ -101,17 +102,27 @@ mod tests {
     #[test]
     fn managers_and_office_see_all_company_jobs() {
         for role in [Role::Manager, Role::Office] {
-            assert_eq!(JobVisibility::resolve(role, &[], &[]), JobVisibility::AllInCompany);
+            assert_eq!(
+                JobVisibility::resolve(role, &[], &[]),
+                JobVisibility::AllInCompany
+            );
             assert!(JobVisibility::resolve(role, &[], &[]).allows(JobId(999)));
         }
     }
 
     #[test]
     fn supervisor_sees_the_union_of_assignments_and_primary_jobs() {
-        let v = JobVisibility::resolve(Role::Supervisor, &[JobId(1), JobId(2)], &[JobId(2), JobId(3)]);
+        let v = JobVisibility::resolve(
+            Role::Supervisor,
+            &[JobId(1), JobId(2)],
+            &[JobId(2), JobId(3)],
+        );
         assert!(v.allows(JobId(1)));
         assert!(v.allows(JobId(2)));
-        assert!(v.allows(JobId(3)), "primary-supervisor jobs count even without an assignment");
+        assert!(
+            v.allows(JobId(3)),
+            "primary-supervisor jobs count even without an assignment"
+        );
         assert!(!v.allows(JobId(4)));
     }
 
@@ -120,7 +131,10 @@ mod tests {
         let v = JobVisibility::resolve(Role::Supervisor, &[], &[]);
         assert!(!v.allows(JobId(1)));
         // The legacy null-means-everything fallback is unrepresentable here.
-        assert_eq!(v.assert_allows(JobId(1)), Err(DomainError::not_found("Job")));
+        assert_eq!(
+            v.assert_allows(JobId(1)),
+            Err(DomainError::not_found("Job"))
+        );
     }
 
     #[test]

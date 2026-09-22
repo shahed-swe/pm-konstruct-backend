@@ -101,7 +101,10 @@ pub struct DelayInfo {
 
 impl DelayInfo {
     const fn plain(status: DelayStatus) -> Self {
-        Self { delay_status: status, delay_days: None }
+        Self {
+            delay_status: status,
+            delay_days: None,
+        }
     }
 }
 
@@ -129,7 +132,10 @@ pub fn compute_delay_info(item: &DelayInput, today: NaiveDate) -> DelayInfo {
             // are midnight-aligned, so the division is exact and the rounding
             // never actually rounds -- but the day count must match exactly.
             let delay_days = (today - est_finish).num_days();
-            return DelayInfo { delay_status: DelayStatus::Delayed, delay_days: Some(delay_days) };
+            return DelayInfo {
+                delay_status: DelayStatus::Delayed,
+                delay_days: Some(delay_days),
+            };
         }
     }
 
@@ -184,7 +190,10 @@ mod tests {
     // -- rule 1: on_hold beats everything -----------------------------------
     #[test]
     fn on_hold_wins_even_when_massively_overdue() {
-        let i = DelayInput { est_finish: Some(d("2026-05-08")), ..input(Some(CfStatus::OnHold)) };
+        let i = DelayInput {
+            est_finish: Some(d("2026-05-08")),
+            ..input(Some(CfStatus::OnHold))
+        };
         assert_eq!(run(&i), DelayInfo::plain(DelayStatus::OnHold));
     }
 
@@ -225,7 +234,10 @@ mod tests {
         };
         assert_eq!(
             run(&i),
-            DelayInfo { delay_status: DelayStatus::Delayed, delay_days: Some(1) }
+            DelayInfo {
+                delay_status: DelayStatus::Delayed,
+                delay_days: Some(1)
+            }
         );
     }
 
@@ -247,7 +259,10 @@ mod tests {
         };
         assert_eq!(
             run(&i),
-            DelayInfo { delay_status: DelayStatus::Delayed, delay_days: Some(5) }
+            DelayInfo {
+                delay_status: DelayStatus::Delayed,
+                delay_days: Some(5)
+            }
         );
     }
 
@@ -260,7 +275,10 @@ mod tests {
         };
         assert_eq!(
             run(&i),
-            DelayInfo { delay_status: DelayStatus::Delayed, delay_days: Some(3) }
+            DelayInfo {
+                delay_status: DelayStatus::Delayed,
+                delay_days: Some(3)
+            }
         );
     }
 
@@ -302,20 +320,29 @@ mod tests {
     // -- rule 7: date inference for unrecognised statuses --------------------
     #[test]
     fn unknown_status_with_est_start_reached_infers_in_progress() {
-        let i = DelayInput { est_start: Some(d("2026-09-01")), ..input(None) };
+        let i = DelayInput {
+            est_start: Some(d("2026-09-01")),
+            ..input(None)
+        };
         assert_eq!(run(&i), DelayInfo::plain(DelayStatus::InProgress));
     }
 
     #[test]
     fn unknown_status_with_est_start_today_infers_in_progress() {
         // `today >= est_start`, inclusive.
-        let i = DelayInput { est_start: Some(d(TODAY)), ..input(None) };
+        let i = DelayInput {
+            est_start: Some(d(TODAY)),
+            ..input(None)
+        };
         assert_eq!(run(&i), DelayInfo::plain(DelayStatus::InProgress));
     }
 
     #[test]
     fn unknown_status_with_future_est_start_is_not_started() {
-        let i = DelayInput { est_start: Some(d("2026-12-01")), ..input(None) };
+        let i = DelayInput {
+            est_start: Some(d("2026-12-01")),
+            ..input(None)
+        };
         assert_eq!(run(&i), DelayInfo::plain(DelayStatus::NotStarted));
     }
 
@@ -350,7 +377,11 @@ mod tests {
         for s in ["not_started", "in_progress", "completed", "on_hold"] {
             assert_eq!(CfStatus::parse(s).map(CfStatus::as_str), Some(s));
         }
-        assert_eq!(CfStatus::parse("delayed"), None, "delayed is computed, never stored");
+        assert_eq!(
+            CfStatus::parse("delayed"),
+            None,
+            "delayed is computed, never stored"
+        );
         assert_eq!(CfStatus::parse(""), None);
     }
 }

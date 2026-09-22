@@ -39,7 +39,10 @@ pub enum DomainError {
 
 impl DomainError {
     pub fn invalid(field: &'static str, reason: impl Into<String>) -> Self {
-        Self::Invalid { field, reason: reason.into() }
+        Self::Invalid {
+            field,
+            reason: reason.into(),
+        }
     }
     #[must_use]
     pub const fn not_found(entity: &'static str) -> Self {

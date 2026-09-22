@@ -19,19 +19,32 @@ pub struct ScopedTx<'t> {
 
 impl std::fmt::Debug for ScopedTx<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ScopedTx").field("scope", &self.scope).finish_non_exhaustive()
+        f.debug_struct("ScopedTx")
+            .field("scope", &self.scope)
+            .finish_non_exhaustive()
     }
 }
 
 impl<'t> ScopedTx<'t> {
     #[must_use]
-    pub const fn scope(&self) -> TenantScope { self.scope }
+    pub const fn scope(&self) -> TenantScope {
+        self.scope
+    }
 
     /// Borrow the underlying transaction for a query.
-    pub fn as_mut(&mut self) -> &mut Transaction<'t, Postgres> { &mut self.tx }
+    ///
+    /// Not named `as_mut`: clippy flags that as confusable with
+    /// `std::convert::AsMut::as_mut`, and this is not that contract.
+    pub fn tx_mut(&mut self) -> &mut Transaction<'t, Postgres> {
+        &mut self.tx
+    }
 
-    pub async fn commit(self) -> Result<(), sqlx::Error> { self.tx.commit().await }
-    pub async fn rollback(self) -> Result<(), sqlx::Error> { self.tx.rollback().await }
+    pub async fn commit(self) -> Result<(), sqlx::Error> {
+        self.tx.commit().await
+    }
+    pub async fn rollback(self) -> Result<(), sqlx::Error> {
+        self.tx.rollback().await
+    }
 }
 
 /// Opens a transaction, applies the tenant GUC, and hands it to `f`.
@@ -47,7 +60,9 @@ pub async fn with_tenant<'a, F, T, E>(
 where
     F: for<'t> FnOnce(
         &'t mut ScopedTx<'a>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, E>> + Send + 't>>,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<T, E>> + Send + 't>,
+    >,
     E: From<sqlx::Error>,
 {
     let mut tx = pool.begin().await?;

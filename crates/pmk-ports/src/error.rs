@@ -18,10 +18,16 @@ pub enum PortError {
     Storage(String),
 
     #[error("upstream {service} unavailable: {detail}")]
-    Unavailable { service: &'static str, detail: String },
+    Unavailable {
+        service: &'static str,
+        detail: String,
+    },
 
     #[error("upstream {service} rejected the request: {detail}")]
-    Rejected { service: &'static str, detail: String },
+    Rejected {
+        service: &'static str,
+        detail: String,
+    },
 
     #[error(transparent)]
     Other(#[from] anyhow::Error),

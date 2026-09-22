@@ -31,12 +31,18 @@ pub struct SystemClock {
 
 impl SystemClock {
     #[must_use]
-    pub const fn new(tz: Tz) -> Self { Self { tz } }
+    pub const fn new(tz: Tz) -> Self {
+        Self { tz }
+    }
 }
 
 impl Clock for SystemClock {
-    fn now_utc(&self) -> DateTime<Utc> { Utc::now() }
-    fn timezone(&self) -> Tz { self.tz }
+    fn now_utc(&self) -> DateTime<Utc> {
+        Utc::now()
+    }
+    fn timezone(&self) -> Tz {
+        self.tz
+    }
 }
 
 /// Frozen clock for tests, so date-dependent rules are deterministic.
@@ -48,12 +54,18 @@ pub struct FixedClock {
 
 impl FixedClock {
     #[must_use]
-    pub const fn new(at: DateTime<Utc>, tz: Tz) -> Self { Self { at, tz } }
+    pub const fn new(at: DateTime<Utc>, tz: Tz) -> Self {
+        Self { at, tz }
+    }
 }
 
 impl Clock for FixedClock {
-    fn now_utc(&self) -> DateTime<Utc> { self.at }
-    fn timezone(&self) -> Tz { self.tz }
+    fn now_utc(&self) -> DateTime<Utc> {
+        self.at
+    }
+    fn timezone(&self) -> Tz {
+        self.tz
+    }
 }
 
 #[cfg(test)]
@@ -67,7 +79,10 @@ mod tests {
         let at = Utc.with_ymd_and_hms(2026, 9, 21, 22, 0, 0).unwrap();
         let melbourne = FixedClock::new(at, chrono_tz::Australia::Melbourne);
         let utc = FixedClock::new(at, chrono_tz::UTC);
-        assert_eq!(melbourne.today(), NaiveDate::from_ymd_opt(2026, 9, 22).unwrap());
+        assert_eq!(
+            melbourne.today(),
+            NaiveDate::from_ymd_opt(2026, 9, 22).unwrap()
+        );
         assert_eq!(utc.today(), NaiveDate::from_ymd_opt(2026, 9, 21).unwrap());
     }
 }

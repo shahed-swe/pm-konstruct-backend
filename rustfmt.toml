@@ -1,5 +1,5 @@
 edition = "2021"
 max_width = 100
 use_field_init_shorthand = true
-imports_granularity = "Module"
-group_imports = "StdExternalCrate"
+# imports_granularity and group_imports are nightly-only; omitted so
+# `cargo fmt --check` is clean on stable.

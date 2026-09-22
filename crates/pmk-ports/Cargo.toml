@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-publish.workspace = false
+publish = false
 
 [lints]
 workspace = true
@@ -15,3 +15,5 @@ async-trait.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
 bytes = "1"
+chrono-tz.workspace = true
+anyhow.workspace = true
