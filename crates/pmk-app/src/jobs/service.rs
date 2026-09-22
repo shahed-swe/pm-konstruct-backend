@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use pmk_domain::ids::{JobId, UserId};
-use pmk_domain::job::{Job, JobAssignment, JobInput};
+use pmk_domain::job::{Job, JobAssignment, JobInput, JobLink, JobLinkInput};
 use pmk_domain::DomainError;
-use pmk_ports::repository::{JobFilter, JobRepository, JobTask, JobTaskInput, JobTaskRepository};
+use pmk_ports::repository::{
+    JobFilter, JobLinkRepository, JobRepository, JobTask, JobTaskInput, JobTaskRepository,
+};
 
 use crate::identity::SessionUser;
 use crate::{AppError, AppResult};
@@ -11,6 +13,7 @@ use crate::{AppError, AppResult};
 pub struct JobService {
     jobs: Arc<dyn JobRepository>,
     tasks: Arc<dyn JobTaskRepository>,
+    links: Arc<dyn JobLinkRepository>,
 }
 
 impl std::fmt::Debug for JobService {
@@ -21,8 +24,12 @@ impl std::fmt::Debug for JobService {
 
 impl JobService {
     #[must_use]
-    pub fn new(jobs: Arc<dyn JobRepository>, tasks: Arc<dyn JobTaskRepository>) -> Self {
-        Self { jobs, tasks }
+    pub fn new(
+        jobs: Arc<dyn JobRepository>,
+        tasks: Arc<dyn JobTaskRepository>,
+        links: Arc<dyn JobLinkRepository>,
+    ) -> Self {
+        Self { jobs, tasks, links }
     }
 
     pub async fn list(&self, s: &SessionUser, filter: JobFilter) -> AppResult<Vec<Job>> {
@@ -173,6 +180,55 @@ impl JobService {
             Ok(())
         } else {
             Err(AppError::Domain(DomainError::not_found("Task")))
+        }
+    }
+}
+
+impl JobService {
+    // ── cloud-storage links ─────────────────────────────────────────────────
+    //
+    // Not a Dropbox integration: these are shared URLs from any provider. See
+    // docs/audit/integrations-reality.md.
+
+    pub async fn links(&self, s: &SessionUser, job: JobId) -> AppResult<Vec<JobLink>> {
+        self.get(s, job).await?;
+        Ok(self.links.list(s.principal.scope(), job).await?)
+    }
+
+    pub async fn add_link(
+        &self,
+        s: &SessionUser,
+        job: JobId,
+        input: JobLinkInput,
+    ) -> AppResult<JobLink> {
+        self.get(s, job).await?;
+        let input = input.normalised();
+        input.validate().map_err(AppError::Domain)?;
+        Ok(self.links.create(s.principal.scope(), job, &input).await?)
+    }
+
+    pub async fn update_link(
+        &self,
+        s: &SessionUser,
+        job: JobId,
+        id: i32,
+        input: JobLinkInput,
+    ) -> AppResult<JobLink> {
+        self.get(s, job).await?;
+        let input = input.normalised();
+        input.validate().map_err(AppError::Domain)?;
+        self.links
+            .update(s.principal.scope(), id, &input)
+            .await?
+            .ok_or_else(|| AppError::Domain(DomainError::not_found("Link")))
+    }
+
+    pub async fn delete_link(&self, s: &SessionUser, job: JobId, id: i32) -> AppResult<()> {
+        self.get(s, job).await?;
+        if self.links.delete(s.principal.scope(), id).await? {
+            Ok(())
+        } else {
+            Err(AppError::Domain(DomainError::not_found("Link")))
         }
     }
 }

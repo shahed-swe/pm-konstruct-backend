@@ -434,3 +434,29 @@ pub trait CallForwardRepository: Send + Sync {
         days: i64,
     ) -> PortResult<Vec<CallForwardItem>>;
 }
+
+// ── job links (formerly "dropbox folders") ──────────────────────────────────
+
+use pmk_domain::job::{JobLink, JobLinkInput};
+
+/// Cloud-storage links on a job.
+///
+/// Backed by `job_dropbox_folders`, whose name is historical: the rows are
+/// plain shared URLs, never API paths. See docs/audit/integrations-reality.md.
+#[async_trait]
+pub trait JobLinkRepository: Send + Sync {
+    async fn list(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<JobLink>>;
+    async fn create(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        input: &JobLinkInput,
+    ) -> PortResult<JobLink>;
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: i32,
+        input: &JobLinkInput,
+    ) -> PortResult<Option<JobLink>>;
+    async fn delete(&self, scope: TenantScope, id: i32) -> PortResult<bool>;
+}

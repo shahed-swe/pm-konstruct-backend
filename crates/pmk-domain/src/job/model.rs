@@ -228,3 +228,155 @@ mod tests {
         assert_eq!(n.job_number, "BSC-1");
     }
 }
+
+/// A cloud-storage link attached to a job.
+///
+/// Despite the `job_dropbox_folders` table name, this was never a Dropbox
+/// integration: all 44 production rows are plain shared URLs, and the client
+/// confirmed "it's just a link to drop box... any cloud based server. Google,
+/// Dropbox etc." See docs/audit/integrations-reality.md.
+///
+/// The column names are kept so the data migration needs no transform.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobLink {
+    pub id: i32,
+    pub job_id: JobId,
+    pub label: String,
+    pub url: String,
+    pub sort_order: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct JobLinkInput {
+    pub label: String,
+    pub url: String,
+    pub sort_order: Option<i32>,
+}
+
+impl JobLinkInput {
+    /// Accepts any `https://` URL, not just Dropbox.
+    ///
+    /// `http://` is rejected: these are shared document links that users click
+    /// from a browser, and every provider serves them over TLS.
+    pub fn validate(&self) -> DomainResult<()> {
+        if self.label.trim().is_empty() {
+            return Err(DomainError::invalid("label", "is required"));
+        }
+        if self.label.len() > 200 {
+            return Err(DomainError::invalid(
+                "label",
+                "must be 200 characters or fewer",
+            ));
+        }
+        let url = self.url.trim();
+        if url.is_empty() {
+            return Err(DomainError::invalid("url", "is required"));
+        }
+        if url.len() > 2000 {
+            return Err(DomainError::invalid(
+                "url",
+                "must be 2000 characters or fewer",
+            ));
+        }
+        if !url.starts_with("https://") {
+            return Err(DomainError::invalid("url", "must start with https://"));
+        }
+        // Reject anything with whitespace or control characters: a link with a
+        // newline in it can break an email header when the job is shared.
+        if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err(DomainError::invalid(
+                "url",
+                "must not contain spaces or line breaks",
+            ));
+        }
+        // "https://" alone, or with no host.
+        let host = &url["https://".len()..];
+        if host.is_empty() || host.starts_with('/') {
+            return Err(DomainError::invalid("url", "is not a valid address"));
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn normalised(mut self) -> Self {
+        self.label = self.label.trim().to_string();
+        self.url = self.url.trim().to_string();
+        self
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+
+    fn link(url: &str) -> JobLinkInput {
+        JobLinkInput {
+            label: "Site File".into(),
+            url: url.into(),
+            sort_order: None,
+        }
+    }
+
+    #[test]
+    fn accepts_a_real_production_dropbox_link() {
+        let u = "https://www.dropbox.com/scl/fo/qgmvkiuajyihvhwa2now5/AA4_YblhPlKJqhn9v3ef6JM?r";
+        assert!(link(u).validate().is_ok());
+    }
+
+    #[test]
+    fn accepts_other_providers() {
+        // The client asked for "any cloud based server. Google, Dropbox etc."
+        for u in [
+            "https://drive.google.com/drive/folders/1a2b3c",
+            "https://onedrive.live.com/?id=root",
+            "https://example.sharepoint.com/sites/site/Docs",
+        ] {
+            assert!(link(u).validate().is_ok(), "{u} should be accepted");
+        }
+    }
+
+    #[test]
+    fn rejects_non_https() {
+        for u in [
+            "http://www.dropbox.com/x",
+            "ftp://host/x",
+            "javascript:alert(1)",
+            "/local/path",
+        ] {
+            assert!(link(u).validate().is_err(), "{u} should be rejected");
+        }
+    }
+
+    #[test]
+    fn rejects_urls_with_whitespace_or_newlines() {
+        assert!(link("https://a.com/ b").validate().is_err());
+        assert!(link("https://a.com\nX-Injected: 1").validate().is_err());
+    }
+
+    #[test]
+    fn rejects_an_empty_host() {
+        assert!(link("https://").validate().is_err());
+        assert!(link("https:///path").validate().is_err());
+    }
+
+    #[test]
+    fn label_is_required() {
+        let mut l = link("https://a.com/x");
+        l.label = "  ".into();
+        assert!(l.validate().is_err());
+    }
+
+    #[test]
+    fn normalisation_trims_both_fields() {
+        let l = JobLinkInput {
+            label: "  Variations  ".into(),
+            url: "  https://a.com/x  ".into(),
+            sort_order: None,
+        }
+        .normalised();
+        assert_eq!(l.label, "Variations");
+        assert_eq!(l.url, "https://a.com/x");
+        assert!(l.validate().is_ok());
+    }
+}

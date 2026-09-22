@@ -1,7 +1,7 @@
 //! Job visibility and assignment invariants — domain-rules R3, R4.
 
 pub mod model;
-pub use model::{Job, JobAssignment, JobInput};
+pub use model::{Job, JobAssignment, JobInput, JobLink, JobLinkInput};
 
 use crate::access::Role;
 use crate::ids::{JobId, UserId};

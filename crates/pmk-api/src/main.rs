@@ -8,8 +8,8 @@ use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
-    PgBillingRepository, PgCallForwardRepository, PgDiaryRepository, PgJobRepository,
-    PgJobTaskRepository, PgRefreshTokenRepository, PgUserRepository,
+    PgBillingRepository, PgCallForwardRepository, PgDiaryRepository, PgJobLinkRepository,
+    PgJobRepository, PgJobTaskRepository, PgRefreshTokenRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -50,6 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let jobs = Arc::new(pmk_app::jobs::JobService::new(
         job_repo.clone(),
         Arc::new(PgJobTaskRepository::new(pool.clone())),
+        Arc::new(PgJobLinkRepository::new(pool.clone())),
     ));
     let clock: Arc<dyn pmk_ports::Clock> = Arc::new(SystemClock::new(config.timezone()));
     let diary = Arc::new(pmk_app::diary::DiaryService::new(

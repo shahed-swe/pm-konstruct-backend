@@ -196,3 +196,51 @@ pub struct JobListQuery {
     pub supervisor_id: Option<i32>,
     pub search: Option<String>,
 }
+
+/// A cloud-storage link on a job.
+///
+/// Stored in `job_dropbox_folders`, but provider-agnostic: the client's
+/// requirement is "any cloud based server. Google, Dropbox etc."
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobLinkDto {
+    pub id: i32,
+    pub job_id: i32,
+    pub label: String,
+    pub url: String,
+    pub sort_order: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<pmk_domain::job::JobLink> for JobLinkDto {
+    fn from(l: pmk_domain::job::JobLink) -> Self {
+        Self {
+            id: l.id,
+            job_id: l.job_id.get(),
+            label: l.label,
+            url: l.url,
+            sort_order: l.sort_order,
+            created_at: l.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobLinkRequest {
+    pub label: String,
+    /// Accepts `path` too, which is what the legacy column is called.
+    #[serde(alias = "path")]
+    pub url: String,
+    pub sort_order: Option<i32>,
+}
+
+impl From<JobLinkRequest> for pmk_domain::job::JobLinkInput {
+    fn from(r: JobLinkRequest) -> Self {
+        Self {
+            label: r.label,
+            url: r.url,
+            sort_order: r.sort_order,
+        }
+    }
+}

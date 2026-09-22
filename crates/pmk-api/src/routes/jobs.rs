@@ -12,8 +12,8 @@ use axum::{Json, Router};
 use pmk_domain::ids::{JobId, UserId};
 
 use crate::dto::{
-    AddAssignmentRequest, AssignmentDto, JobDto, JobListQuery, JobTaskDto, JobTaskRequest,
-    JobUpsertRequest, TaskNotesRequest,
+    AddAssignmentRequest, AssignmentDto, JobDto, JobLinkDto, JobLinkRequest, JobListQuery,
+    JobTaskDto, JobTaskRequest, JobUpsertRequest, TaskNotesRequest,
 };
 use crate::error::ApiError;
 use crate::extract::{JobsRead, JobsWrite, ManagerOnly, RequirePermission, RequireRole};
@@ -27,6 +27,11 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/assignments/{user_id}", delete(remove_assignment))
         .route("/{id}/assignments/{user_id}/primary", put(set_primary))
         .route("/{id}/tasks", get(list_tasks).post(create_task))
+        .route("/{id}/links", get(list_links).post(add_link))
+        .route(
+            "/{id}/links/{link_id}",
+            put(update_link).delete(delete_link),
+        )
 }
 
 /// Separate router for the top-level `/tasks` mount, which the legacy API
@@ -206,4 +211,47 @@ fn to_task_input(r: JobTaskRequest) -> pmk_ports::repository::JobTaskInput {
         notes: r.notes,
         sort_order: r.sort_order,
     }
+}
+
+// ── cloud-storage links ─────────────────────────────────────────────────────
+
+async fn list_links(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<JobsRead>,
+    Path(id): Path<i32>,
+) -> Result<Json<Vec<JobLinkDto>>, ApiError> {
+    let l = state.jobs.links(&session, JobId(id)).await?;
+    Ok(Json(l.into_iter().map(Into::into).collect()))
+}
+
+async fn add_link(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<JobsWrite>,
+    Path(id): Path<i32>,
+    Json(req): Json<JobLinkRequest>,
+) -> Result<(StatusCode, Json<JobLinkDto>), ApiError> {
+    let l = state.jobs.add_link(&session, JobId(id), req.into()).await?;
+    Ok((StatusCode::CREATED, Json(l.into())))
+}
+
+async fn update_link(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<JobsWrite>,
+    Path((id, link_id)): Path<(i32, i32)>,
+    Json(req): Json<JobLinkRequest>,
+) -> Result<Json<JobLinkDto>, ApiError> {
+    let l = state
+        .jobs
+        .update_link(&session, JobId(id), link_id, req.into())
+        .await?;
+    Ok(Json(l.into()))
+}
+
+async fn delete_link(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<JobsWrite>,
+    Path((id, link_id)): Path<(i32, i32)>,
+) -> Result<StatusCode, ApiError> {
+    state.jobs.delete_link(&session, JobId(id), link_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
