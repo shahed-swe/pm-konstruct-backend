@@ -66,6 +66,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     let clock: Arc<dyn pmk_ports::Clock> = Arc::new(SystemClock::new(config.timezone()));
 
+    // One mailer, shared by everything that sends, so all of them read the
+    // same company settings and fail the same way when none are configured.
+    let mailer = Arc::new(pmk_app::mail::Mailer::new(
+        Arc::new(PgSettingsRepository::new(pool.clone())),
+        Arc::new(pmk_infra::mail::LettreEmailSender::allowing_private_relays(
+            config.smtp.allow_private_relays,
+        )),
+    ));
+
     // `None` when no API key is configured: the endpoint then returns 503 and
     // the diary simply saves without a stamp. No key has ever been set in
     // production, so this is the normal state rather than a fault.
@@ -86,6 +95,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         weather_provider.clone(),
         clock.clone(),
         Some(events.clone()),
+        Arc::new(PgUserRepository::new(pool.clone())),
+        mailer.clone(),
     ));
 
     let call_forward = Arc::new(pmk_app::call_forward::CallForwardService::new(
@@ -117,6 +128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         job_repo5,
         store2,
         clock.clone(),
+        Arc::new(PgUserRepository::new(pool.clone())),
+        mailer.clone(),
     ));
 
     let dashboard = Arc::new(pmk_app::dashboard::DashboardService::new(
@@ -151,9 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let settings = Arc::new(pmk_app::settings::SettingsService::new(
         Arc::new(PgSettingsRepository::new(pool.clone())),
         store3,
-        Arc::new(pmk_infra::mail::LettreEmailSender::allowing_private_relays(
-            config.smtp.allow_private_relays,
-        )),
+        mailer.clone(),
     ));
 
     let weather = Arc::new(pmk_app::weather::WeatherService::new(

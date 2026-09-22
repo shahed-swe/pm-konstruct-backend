@@ -1,0 +1,16 @@
+{
+ "cases": {
+  "full": "ETO J-100-01 — EXTRA TO ORDER\nPURCHASE ORDER: J-100-01\nRaised by: Sarah\nJob: J-100 — Smith Residence\n\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nThe client will wear this; we quoted low to win the job.\n\nWHAT IS REQUIRED\nTwo additional power points in the kitchen.\n\nManager approval required before sharing.",
+  "plain": "Poured the slab today.\nWeather held.",
+  "heading_only": "General note\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nsomething",
+  "no_resume": "ETO J-1-01 — EXTRA TO ORDER\n\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nsecret terms",
+  "multiline_reason": "ETO J-2-05 — EXTRA TO ORDER\n\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nline one\nline two\nline three\n\nWHAT IS REQUIRED\ndo the work"
+ },
+ "expected": {
+  "full": "ETO J-100-01 — EXTRA TO ORDER\nPURCHASE ORDER: J-100-01\nRaised by: Sarah\nJob: J-100 — Smith Residence\n\n\nWHAT IS REQUIRED\nTwo additional power points in the kitchen.\n\nManager approval required before sharing.",
+  "plain": "Poured the slab today.\nWeather held.",
+  "heading_only": "General note\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nsomething",
+  "no_resume": "ETO J-1-01 — EXTRA TO ORDER\n\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nsecret terms",
+  "multiline_reason": "ETO J-2-05 — EXTRA TO ORDER\n\n\nWHAT IS REQUIRED\ndo the work"
+ }
+}

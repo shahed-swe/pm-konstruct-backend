@@ -295,3 +295,13 @@ impl From<ConfirmInspectionPhoto> for pmk_app::forms::InspectionPhotoUpload {
 pub struct ConfirmInspectionPhotos {
     pub files: Vec<ConfirmInspectionPhoto>,
 }
+
+/// Emailing a form to colleagues on the job.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailFormRequest {
+    pub job_id: i32,
+    pub to: Vec<String>,
+    pub subject: String,
+    pub body: String,
+}

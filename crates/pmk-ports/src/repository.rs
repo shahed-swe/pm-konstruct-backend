@@ -36,6 +36,18 @@ pub trait UserRepository: Send + Sync {
 
     async fn list(&self, scope: TenantScope) -> PortResult<Vec<User>>;
 
+    /// Addresses a diary or form email for this job may be sent to.
+    ///
+    /// Active company users who can see the job: managers and office staff
+    /// see every job, supervisors only the ones they are assigned to.
+    /// Restricting the list is what stops the send paths being used to relay
+    /// mail to arbitrary addresses.
+    async fn email_recipients_for_job(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+    ) -> PortResult<Vec<String>>;
+
     /// One user within the caller's tenant.
     async fn find(&self, scope: TenantScope, id: UserId) -> PortResult<Option<User>>;
 

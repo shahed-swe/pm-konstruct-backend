@@ -24,6 +24,7 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/eto", post(raise_eto))
+        .route("/email", post(email_form))
         .route("/property-inspection/draft", post(get_or_create_draft))
         .route("/property-inspection/{form_id}", put(save_draft))
         .route(
@@ -161,6 +162,25 @@ fn revision_header(headers: &HeaderMap) -> Result<i32, ApiError> {
         return Err(invalid());
     }
     Ok(revision)
+}
+
+/// Emails a form to colleagues on the job.
+async fn email_form(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<SiteDiaryWrite>,
+    Json(req): Json<crate::dto::EmailFormRequest>,
+) -> Result<Json<crate::dto::EmailSentDto>, ApiError> {
+    let sent = state
+        .forms
+        .email_form(
+            &session,
+            pmk_domain::ids::JobId(req.job_id),
+            &req.to,
+            &req.subject,
+            &req.body,
+        )
+        .await?;
+    Ok(Json(crate::dto::EmailSentDto::to(&sent)))
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use pmk_domain::settings::{Branding, BrandingInput, EmailSettings, EmailStatus};
 use pmk_domain::tenant::CompanyId;
 use pmk_domain::DomainError;
 use pmk_ports::repository::SettingsRepository;
-use pmk_ports::{EmailSender, Message, ObjectStore, SmtpCredentials};
+use pmk_ports::{Message, ObjectStore};
 
 use crate::identity::SessionUser;
 use crate::media::upload;
@@ -28,7 +28,7 @@ pub struct PreparedBrandingUpload {
 pub struct SettingsService {
     settings: Arc<dyn SettingsRepository>,
     store: Arc<dyn ObjectStore>,
-    mail: Arc<dyn EmailSender>,
+    mail: Arc<crate::mail::Mailer>,
 }
 
 impl std::fmt::Debug for SettingsService {
@@ -42,7 +42,7 @@ impl SettingsService {
     pub fn new(
         settings: Arc<dyn SettingsRepository>,
         store: Arc<dyn ObjectStore>,
-        mail: Arc<dyn EmailSender>,
+        mail: Arc<crate::mail::Mailer>,
     ) -> Self {
         Self {
             settings,
@@ -238,10 +238,9 @@ impl SettingsService {
                 "must be a valid address",
             )));
         }
-        let creds = self.credentials(s).await?;
         self.mail
             .send(
-                &creds,
+                s,
                 &Message {
                     to: vec![to.to_string()],
                     subject: "PM Konstruct test message".to_string(),
@@ -256,37 +255,10 @@ impl SettingsService {
 
     /// Sends a message through the company's configured relay.
     ///
-    /// Shared with the form-email path, so both go out the same way and are
+    /// Shared with the diary and form paths via the mailer, so all three are
     /// refused the same way when nothing is configured.
     pub async fn send(&self, s: &SessionUser, message: &Message) -> AppResult<()> {
-        let creds = self.credentials(s).await?;
-        self.mail.send(&creds, message).await?;
-        Ok(())
-    }
-
-    /// Assembles the relay credentials, including the stored password.
-    async fn credentials(&self, s: &SessionUser) -> AppResult<SmtpCredentials> {
-        let scope = s.principal.scope();
-        let settings = self.settings.email_settings(scope).await?;
-        if !settings.is_configured() {
-            return Err(AppError::Domain(DomainError::invalid(
-                "smtpHost",
-                "Configure an SMTP host and sender address before sending email",
-            )));
-        }
-        // Re-validated on the way out: the settings may predate the address
-        // checks, and the relay is about to be connected to.
-        settings.validate().map_err(AppError::Domain)?;
-
-        Ok(SmtpCredentials {
-            host: settings.smtp_host.unwrap_or_default(),
-            // 587 is the submission port, which is what the column defaults to.
-            port: u16::try_from(settings.smtp_port.unwrap_or(587)).unwrap_or(587),
-            user: settings.smtp_user,
-            password: self.settings.smtp_password(scope).await?,
-            from: settings.smtp_from.unwrap_or_default(),
-            secure: settings.smtp_secure,
-        })
+        self.mail.send(s, message).await
     }
 }
 

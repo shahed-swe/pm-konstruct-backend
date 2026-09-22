@@ -249,3 +249,31 @@ pub struct DiaryListQuery {
     #[serde(default)]
     pub include_archived: bool,
 }
+
+/// Emailing a diary entry to colleagues on the job.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailEntryRequest {
+    pub to: Vec<String>,
+    #[serde(default)]
+    pub subject: String,
+    pub custom_message: Option<String>,
+}
+
+/// What was actually sent, and to whom.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSentDto {
+    pub success: bool,
+    pub message: String,
+}
+
+impl EmailSentDto {
+    #[must_use]
+    pub fn to(recipients: &[String]) -> Self {
+        Self {
+            success: true,
+            message: format!("Email sent to {}", recipients.join(", ")),
+        }
+    }
+}

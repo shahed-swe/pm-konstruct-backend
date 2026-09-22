@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use pmk_domain::email::{
+    assert_recipients_allowed, normalise_recipients, redact_internal_eto_reason,
+};
 use pmk_domain::forms::{
     inspection_action_status, inspection_entry_summary, inspection_note, stale_revision, EtoInput,
     InspectionDraftInput,
@@ -11,9 +14,9 @@ use pmk_domain::media::{
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
     EtoListItem, EtoRaised, FormsRepository, InspectionForm, InspectionPhotoRecord, JobRepository,
-    MediaOwner, MediaRecord, RenderedInspection,
+    MediaOwner, MediaRecord, RenderedInspection, UserRepository,
 };
-use pmk_ports::{Clock, ObjectStore};
+use pmk_ports::{Clock, Message, ObjectStore};
 
 use crate::identity::SessionUser;
 use crate::media::upload;
@@ -38,6 +41,9 @@ pub struct InspectionPhotoUpload {
 
 pub struct FormsService {
     forms: Arc<dyn FormsRepository>,
+    /// For the recipient allowlist: who may be emailed a form.
+    users: Arc<dyn UserRepository>,
+    mail: Arc<crate::mail::Mailer>,
     jobs: Arc<dyn JobRepository>,
     store: Arc<dyn ObjectStore>,
     clock: Arc<dyn Clock>,
@@ -56,12 +62,16 @@ impl FormsService {
         jobs: Arc<dyn JobRepository>,
         store: Arc<dyn ObjectStore>,
         clock: Arc<dyn Clock>,
+        users: Arc<dyn UserRepository>,
+        mail: Arc<crate::mail::Mailer>,
     ) -> Self {
         Self {
             forms,
             jobs,
             store,
             clock,
+            users,
+            mail,
         }
     }
 
@@ -109,6 +119,57 @@ impl FormsService {
     pub async fn etos_for_job(&self, s: &SessionUser, job: JobId) -> AppResult<Vec<EtoListItem>> {
         self.assert_job_access(s, job).await?;
         Ok(self.forms.etos_for_job(s.principal.scope(), job).await?)
+    }
+
+    /// Emails a form to colleagues on the job.
+    ///
+    /// The same recipient rule as the diary: active users who can see the job,
+    /// so the feature cannot be used to relay mail anywhere else.
+    pub async fn email_form(
+        &self,
+        s: &SessionUser,
+        job: JobId,
+        to: &[String],
+        subject: &str,
+        body: &str,
+    ) -> AppResult<Vec<String>> {
+        self.assert_job_access(s, job).await?;
+
+        let recipients = normalise_recipients(to).map_err(AppError::Domain)?;
+        let allowed = self
+            .users
+            .email_recipients_for_job(s.principal.scope(), job)
+            .await?;
+        assert_recipients_allowed(&recipients, &allowed).map_err(AppError::Domain)?;
+
+        if subject.trim().is_empty() {
+            return Err(AppError::Domain(DomainError::invalid(
+                "subject",
+                "a subject is required",
+            )));
+        }
+        if body.trim().is_empty() {
+            return Err(AppError::Domain(DomainError::invalid(
+                "body",
+                "a message is required",
+            )));
+        }
+
+        self.mail
+            .send(
+                s,
+                &Message {
+                    to: recipients.clone(),
+                    subject: subject.trim().to_string(),
+                    // Redacted like a diary note: a form can carry an ETO's
+                    // internal reason if someone pasted it in.
+                    body: redact_internal_eto_reason(body),
+                    html: false,
+                },
+            )
+            .await?;
+
+        Ok(recipients)
     }
 
     // ── property inspection ─────────────────────────────────────────────────

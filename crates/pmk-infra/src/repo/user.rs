@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use pmk_domain::access::{Permission, Role};
 use pmk_domain::identity::accounts::UserInput;
-use pmk_domain::ids::UserId;
+use pmk_domain::ids::{JobId, UserId};
 use pmk_domain::tenant::{CompanyId, TenantScope};
 use pmk_domain::User;
 use pmk_ports::repository::{StoredCredential, UserRepository};
@@ -155,6 +155,32 @@ impl UserRepository for PgUserRepository {
             .map_err(map_sqlx)?;
         tx.commit().await.map_err(map_sqlx)?;
         rows.into_iter().map(UserRow::into_domain).collect()
+    }
+
+    async fn email_recipients_for_job(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+    ) -> PortResult<Vec<String>> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        // Inactive accounts are excluded: someone who has left the company
+        // must not keep receiving its site diaries.
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT u.email FROM users u \
+             WHERE u.active \
+               AND ( u.role IN ('MANAGER','OFFICE') \
+                     OR u.id = (SELECT j.supervisor_id FROM jobs j WHERE j.id = $1) \
+                     OR EXISTS (SELECT 1 FROM job_assignments a \
+                                WHERE a.job_id = $1 AND a.user_id = u.id) ) \
+             ORDER BY u.email",
+        )
+        .bind(job.get())
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(rows)
     }
 
     async fn find(&self, scope: TenantScope, id: UserId) -> PortResult<Option<User>> {

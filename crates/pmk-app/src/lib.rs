@@ -13,6 +13,7 @@ pub mod error;
 pub mod forms;
 pub mod identity;
 pub mod jobs;
+pub mod mail;
 pub mod media;
 pub mod notifications;
 pub mod progress;

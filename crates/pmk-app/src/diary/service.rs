@@ -4,13 +4,16 @@ use pmk_domain::diary::{
     ActionStatus, DiaryEntry, DiaryEntryInput, DiaryNote, DiaryNoteComment, DiaryNoteInput,
     WeatherStamp,
 };
+use pmk_domain::email::{
+    assert_recipients_allowed, normalise_recipients, redact_internal_eto_reason,
+};
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId};
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
-    DiaryFilter, DiaryRepository, JobRepository, WeatherProvider, WeatherSnapshot,
+    DiaryFilter, DiaryRepository, JobRepository, UserRepository, WeatherProvider, WeatherSnapshot,
 };
 use pmk_ports::Clock;
-use pmk_ports::{BroadcastEvent, EventBus};
+use pmk_ports::{BroadcastEvent, EventBus, Message};
 
 use crate::identity::SessionUser;
 use crate::{AppError, AppResult};
@@ -23,6 +26,9 @@ pub struct DiaryService {
     /// Optional so the service is constructible in tests without a database
     /// listener behind it.
     events: Option<Arc<dyn EventBus>>,
+    /// For the recipient allowlist: who may be emailed a diary entry.
+    users: Arc<dyn UserRepository>,
+    mail: Arc<crate::mail::Mailer>,
 }
 
 impl std::fmt::Debug for DiaryService {
@@ -39,6 +45,8 @@ impl DiaryService {
         weather: Option<Arc<dyn WeatherProvider>>,
         clock: Arc<dyn Clock>,
         events: Option<Arc<dyn EventBus>>,
+        users: Arc<dyn UserRepository>,
+        mail: Arc<crate::mail::Mailer>,
     ) -> Self {
         Self {
             diary,
@@ -46,6 +54,8 @@ impl DiaryService {
             weather,
             clock,
             events,
+            users,
+            mail,
         }
     }
 
@@ -183,6 +193,56 @@ impl DiaryService {
         if let Err(e) = bus.publish(&event).await {
             tracing::warn!(error = %e, "could not broadcast a diary change");
         }
+    }
+
+    /// Emails a diary entry to colleagues on the job.
+    ///
+    /// Recipients are restricted to active users who can see the job, which is
+    /// what stops this being a relay for arbitrary addresses. The ETO internal
+    /// reason is stripped from every note on the way out: it records the
+    /// builder's commercial position, and the client is entitled to the rest.
+    pub async fn email_entry(
+        &self,
+        s: &SessionUser,
+        entry: DiaryEntryId,
+        request: &DiaryEmailRequest,
+    ) -> AppResult<Vec<String>> {
+        let parent = self.get(s, entry).await?;
+
+        let recipients = normalise_recipients(&request.to).map_err(AppError::Domain)?;
+        let allowed = self
+            .users
+            .email_recipients_for_job(s.principal.scope(), parent.job_id)
+            .await?;
+        assert_recipients_allowed(&recipients, &allowed).map_err(AppError::Domain)?;
+
+        let notes = self.diary.notes(s.principal.scope(), entry, false).await?;
+
+        let subject = if request.subject.trim().is_empty() {
+            format!(
+                "Site Diary — Job #{} — {}",
+                parent.job_id.get(),
+                parent.date
+            )
+        } else {
+            request.subject.trim().to_string()
+        };
+
+        let body = render_diary_email(&parent, &notes, request.custom_message.as_deref());
+
+        self.mail
+            .send(
+                s,
+                &Message {
+                    to: recipients.clone(),
+                    subject,
+                    body,
+                    html: false,
+                },
+            )
+            .await?;
+
+        Ok(recipients)
     }
 
     /// The structured weather reading for an entry, if one was recorded.
@@ -323,4 +383,60 @@ impl DiaryService {
             .add_comment(s.principal.scope(), note, s.user.id, &content)
             .await?)
     }
+}
+
+/// What the client asked to send.
+#[derive(Debug, Clone, Default)]
+pub struct DiaryEmailRequest {
+    pub to: Vec<String>,
+    pub subject: String,
+    pub custom_message: Option<String>,
+}
+
+/// Lays out a diary entry as plain text.
+///
+/// Plain text rather than HTML: the message goes to a client's phone as often
+/// as a desk, and a site diary is a record rather than a brochure.
+fn render_diary_email(
+    entry: &DiaryEntry,
+    notes: &[DiaryNote],
+    custom_message: Option<&str>,
+) -> String {
+    let mut out = Vec::new();
+
+    if let Some(message) = custom_message.map(str::trim).filter(|m| !m.is_empty()) {
+        out.push(message.to_string());
+        out.push(String::new());
+    }
+
+    out.push(format!("Site Diary — {}", entry.date));
+    if let Some(time) = entry.time.as_deref().filter(|t| !t.is_empty()) {
+        out.push(format!("Time: {time}"));
+    }
+    if let Some(weather) = entry.weather.as_deref().filter(|w| !w.is_empty()) {
+        out.push(format!("Weather: {weather}"));
+    }
+    if let Some(workforce) = entry.workforce {
+        out.push(format!("Workforce: {workforce}"));
+    }
+    out.push(String::new());
+    out.push("WORK COMPLETED".to_string());
+    out.push(entry.work_completed.clone());
+
+    if !notes.is_empty() {
+        out.push(String::new());
+        out.push("NOTES".to_string());
+        for note in notes {
+            // Every note is redacted, not only the ones categorised as ETOs:
+            // the category is metadata and the heading is what actually marks
+            // the confidential part.
+            out.push(format!(
+                "- [{}] {}",
+                note.category.as_str(),
+                redact_internal_eto_reason(&note.content)
+            ));
+        }
+    }
+
+    out.join("\n")
 }

@@ -5,7 +5,7 @@
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::routing::{get, patch};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId};
 
@@ -23,6 +23,7 @@ pub fn router() -> Router<AppState> {
         // Ahead of `/{id}` so "job" is never parsed as an entry id.
         .route("/job/{job_id}/etos", get(job_etos))
         .route("/{id}/weather-snapshot", get(weather_snapshot))
+        .route("/{id}/email", post(email_entry))
         .route("/{id}", get(get_one).put(update).delete(remove))
         .route("/{id}/action-status", patch(set_action_status))
         .route("/{id}/notes", get(notes).post(add_note))
@@ -267,4 +268,30 @@ async fn weather_snapshot(
         .weather_snapshot(&session, DiaryEntryId(id))
         .await?;
     Ok(Json(snapshot.map(Into::into)))
+}
+
+/// Emails an entry to colleagues on the job.
+///
+/// Recipients are restricted to active users who can see that job, so this
+/// cannot be used to relay mail to arbitrary addresses, and the ETO internal
+/// reason is stripped from every note on the way out.
+async fn email_entry(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<SiteDiaryRead>,
+    Path(id): Path<i32>,
+    Json(req): Json<crate::dto::EmailEntryRequest>,
+) -> Result<Json<crate::dto::EmailSentDto>, ApiError> {
+    let sent = state
+        .diary
+        .email_entry(
+            &session,
+            DiaryEntryId(id),
+            &pmk_app::diary::DiaryEmailRequest {
+                to: req.to,
+                subject: req.subject,
+                custom_message: req.custom_message,
+            },
+        )
+        .await?;
+    Ok(Json(crate::dto::EmailSentDto::to(&sent)))
 }
