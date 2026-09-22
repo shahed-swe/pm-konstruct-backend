@@ -28,7 +28,7 @@ async-trait  = "0.1"
 # http
 axum         = { version = "0.8", features = ["macros", "multipart"] }
 tower        = "0.5"
-tower-http   = { version = "0.6", features = ["trace", "compression-gzip", "timeout", "limit", "cors", "normalize-path", "request-id", "set-header", "util"] }
+tower-http   = { version = "0.6", features = ["trace", "compression-gzip", "timeout", "limit", "catch-panic", "cors", "normalize-path", "request-id", "set-header", "util"] }
 hyper        = "1.6"
 
 # db

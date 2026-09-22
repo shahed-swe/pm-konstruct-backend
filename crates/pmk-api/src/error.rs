@@ -271,7 +271,16 @@ fn constraint_message(constraint: &str) -> String {
         "jobs_company_job_number_unique" => {
             "A job with this number already exists for your company".into()
         }
-        "users_email_unique" => "An account with this email already exists".into(),
+        "users_email_unique" | "registration_email_taken" => {
+            "An account with this email already exists".into()
+        }
+        "registration_company_taken" => {
+            "A company with this name already exists. Sign in or use a more specific company name."
+                .into()
+        }
+        "registration_in_progress" => {
+            "Registration is already in progress. Please try again.".into()
+        }
         "uq_job_assignments_single_primary" => "This job already has a primary supervisor".into(),
         "uq_job_assignments_job_user" => "This user is already assigned to the job".into(),
         "uq_scheduler_company_worker_date" => {

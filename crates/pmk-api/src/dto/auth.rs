@@ -125,3 +125,55 @@ pub struct ReadyResponse {
     pub database: bool,
     pub migrations: bool,
 }
+
+// ── first run, registration and recovery ────────────────────────────────────
+
+/// Whether this installation still needs its first account.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupStatusDto {
+    pub needs_setup: bool,
+}
+
+/// The first-run form, plus the shared secret that authorises it.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupRequest {
+    pub setup_key: String,
+    pub name: String,
+    pub email: String,
+    pub password: String,
+    pub phone: Option<String>,
+    pub company_name: Option<String>,
+}
+
+/// The public sign-up form.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterRequest {
+    pub company_name: String,
+    pub name: String,
+    pub email: String,
+    pub password: String,
+    pub phone: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+/// Always the same wording, whatever happened.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageDto {
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub password: String,
+}

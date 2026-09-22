@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use axum::http::{header, HeaderValue, Method};
 use axum::Router;
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -81,6 +82,12 @@ pub fn build_router(state: AppState) -> Router {
         ))
         .layer(RequestBodyLimitLayer::new(cfg.server.max_body_bytes))
         .layer(TraceLayer::new_for_http())
+        // A panic in a handler would otherwise drop the connection with no
+        // response at all, which reads to the client as a network failure
+        // rather than a server fault. This turns it into a 500 the logs and
+        // the client can both see. It is a backstop, not a licence: a panic
+        // still means a bug.
+        .layer(CatchPanicLayer::new())
         // Security headers. CSP is tighter than the legacy policy, which
         // allowed 'unsafe-inline' styles.
         .layer(SetResponseHeaderLayer::overriding(

@@ -88,6 +88,7 @@ pub fn looks_like_email(s: &str) -> bool {
 }
 
 pub mod accounts;
+pub mod recovery;
 
 #[cfg(test)]
 mod tests {

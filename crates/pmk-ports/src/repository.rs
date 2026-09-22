@@ -1790,3 +1790,87 @@ pub trait SettingsRepository: Send + Sync {
         input: &EmailSettings,
     ) -> PortResult<EmailSettings>;
 }
+
+// ── bootstrap and recovery ──────────────────────────────────────────────────
+
+use pmk_domain::identity::accounts::UserInput as AccountInput;
+
+/// A new company and its first manager.
+#[derive(Debug, Clone)]
+pub struct CompanyRegistration {
+    pub company_name: String,
+    pub manager: AccountInput,
+}
+
+/// What registering produced.
+#[derive(Debug, Clone)]
+pub struct RegisteredCompany {
+    pub company_id: CompanyId,
+    pub manager: User,
+}
+
+/// A password-reset token that is still good.
+#[derive(Debug, Clone)]
+pub struct ResetToken {
+    /// `password_reset_tokens.id`, which is an `integer`.
+    pub id: i32,
+    pub user_id: UserId,
+}
+
+#[async_trait]
+pub trait BootstrapRepository: Send + Sync {
+    /// Has anyone been created yet?
+    ///
+    /// Not tenant-scoped: it is asked before any company exists, to decide
+    /// whether the first-run screen should be shown.
+    async fn any_users_exist(&self) -> PortResult<bool>;
+
+    /// Creates a company with its first manager.
+    ///
+    /// Runs SERIALIZABLE so two concurrent registrations cannot both see an
+    /// empty database and both create a company. `bootstrap` distinguishes
+    /// first-run setup, which additionally refuses to run once any user
+    /// exists, from ordinary self-service registration.
+    async fn register_company(
+        &self,
+        input: &CompanyRegistration,
+        password_hash: &str,
+        bootstrap: bool,
+    ) -> PortResult<RegisteredCompany>;
+
+    /// Active users in the company owning this address, and that user.
+    ///
+    /// Not tenant-scoped: `forgot-password` is unauthenticated, so there is
+    /// no session to scope by. Returns `None` rather than an error for an
+    /// unknown address; the caller responds identically either way.
+    async fn recovery_context(&self, email: &str) -> PortResult<Option<(UserId, i64)>>;
+
+    /// Stores an emailed reset token.
+    async fn store_reset_token(
+        &self,
+        user: UserId,
+        token: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> PortResult<()>;
+
+    /// Finds an unexpired, unused token matching either candidate.
+    ///
+    /// Not tenant-scoped: the person resetting cannot authenticate yet, and
+    /// the token itself is the credential.
+    async fn find_reset_token(
+        &self,
+        raw: &str,
+        hashed_code: &str,
+    ) -> PortResult<Option<ResetToken>>;
+
+    /// Spends a token and sets the new password, in one transaction.
+    ///
+    /// Returns `false` when the token was claimed in between -- a concurrent
+    /// reset, or a newly issued code that superseded it.
+    async fn claim_reset_and_set_password(
+        &self,
+        token_id: i32,
+        user: UserId,
+        password_hash: &str,
+    ) -> PortResult<bool>;
+}

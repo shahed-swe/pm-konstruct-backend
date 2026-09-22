@@ -9,7 +9,7 @@ use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
-    PgBillingRepository, PgCalendarRepository, PgCallForwardRepository,
+    PgBillingRepository, PgBootstrapRepository, PgCalendarRepository, PgCallForwardRepository,
     PgCallForwardTemplateRepository, PgDashboardRepository, PgDiaryRepository, PgFormsRepository,
     PgJobLinkRepository, PgJobRepository, PgJobTaskRepository, PgMediaRepository,
     PgNotificationRepository, PgProgressRepository, PgRefreshTokenRepository, PgReportsRepository,
@@ -43,12 +43,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let refresh = Arc::new(PgRefreshTokenRepository::new(pool.clone()));
     let billing = Arc::new(PgBillingRepository::new(pool.clone()));
     let codec = TokenCodec::new(&config.auth.jwt_secret, config.access_ttl())?;
+    let bootstrap_clock: Arc<dyn pmk_ports::Clock> = Arc::new(SystemClock::new(config.timezone()));
     let auth = Arc::new(AuthService::new(
         users,
         refresh,
         billing,
         codec,
         config.refresh_ttl(),
+        pmk_app::identity::BootstrapDeps {
+            repository: Arc::new(PgBootstrapRepository::new(pool.clone())),
+            clock: bootstrap_clock,
+            setup_secret: config.auth.setup_secret.clone(),
+        },
     )?);
 
     let job_repo = Arc::new(PgJobRepository::new(pool.clone()));

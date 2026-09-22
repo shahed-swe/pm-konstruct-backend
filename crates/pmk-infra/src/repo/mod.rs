@@ -1,6 +1,7 @@
 //! sqlx implementations of the repository ports.
 
 pub mod billing;
+pub mod bootstrap;
 pub mod calendar;
 pub mod call_forward;
 pub mod cf_template;
@@ -20,6 +21,7 @@ pub mod settings;
 pub mod user;
 
 pub use billing::PgBillingRepository;
+pub use bootstrap::PgBootstrapRepository;
 pub use calendar::PgCalendarRepository;
 pub use call_forward::PgCallForwardRepository;
 pub use cf_template::PgCallForwardTemplateRepository;

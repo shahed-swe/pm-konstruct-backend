@@ -56,6 +56,10 @@ pub struct AuthConfig {
     /// Off only for local HTTP development.
     pub cookie_secure: bool,
     pub login_rate_limit_per_minute: u32,
+    /// Authorises first-run setup. Empty disables the endpoint entirely,
+    /// which is what a deployment past its first run wants -- leaving it set
+    /// means anyone holding it could create a company on this installation.
+    pub setup_secret: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,6 +158,7 @@ impl Default for Config {
                 cookie_domain: None,
                 cookie_secure: true,
                 login_rate_limit_per_minute: 10,
+                setup_secret: String::new(),
             },
             storage: StorageConfig {
                 endpoint: "http://localhost:9000".into(),
