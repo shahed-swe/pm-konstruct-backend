@@ -11,8 +11,8 @@ use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
     PgBillingRepository, PgCalendarRepository, PgCallForwardRepository, PgDashboardRepository,
     PgDiaryRepository, PgFormsRepository, PgJobLinkRepository, PgJobRepository,
-    PgJobTaskRepository, PgMediaRepository, PgProgressRepository, PgRefreshTokenRepository,
-    PgReportsRepository, PgSchedulerRepository, PgUserRepository,
+    PgJobTaskRepository, PgMediaRepository, PgNotificationRepository, PgProgressRepository,
+    PgRefreshTokenRepository, PgReportsRepository, PgSchedulerRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -64,6 +64,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(PgJobLinkRepository::new(pool.clone())),
     ));
     let clock: Arc<dyn pmk_ports::Clock> = Arc::new(SystemClock::new(config.timezone()));
+
+    // Starts LISTENing before any service that publishes to it is built, so
+    // an event raised by the first request has somewhere to go.
+    let events: Arc<dyn pmk_ports::EventBus> =
+        Arc::new(pmk_infra::events::PgEventBus::start(pool.clone()).await?);
     let diary = Arc::new(pmk_app::diary::DiaryService::new(
         Arc::new(PgDiaryRepository::new(pool.clone())),
         job_repo,
@@ -71,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // which is the same graceful degradation R8 requires on an outage.
         None,
         clock.clone(),
+        Some(events.clone()),
     ));
 
     let call_forward = Arc::new(pmk_app::call_forward::CallForwardService::new(
@@ -120,6 +126,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock.clone(),
     ));
 
+    let notifications = Arc::new(pmk_app::notifications::NotificationService::new(
+        Arc::new(PgNotificationRepository::new(pool.clone())),
+        config.notifications.vapid_public_key.clone(),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -133,6 +144,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         dashboard,
         progress,
         reports,
+        notifications,
+        events,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };

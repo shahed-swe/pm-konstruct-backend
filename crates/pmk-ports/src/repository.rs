@@ -1514,3 +1514,81 @@ pub struct DailyTaskRow {
     pub status: String,
     pub sort_order: i32,
 }
+
+// ── notifications ───────────────────────────────────────────────────────────
+
+use pmk_domain::ids::NotificationId;
+use pmk_domain::notifications::{Notification, NotificationPrefs, PushSubscription};
+
+/// A notification about to be raised.
+#[derive(Debug, Clone)]
+pub struct NotificationInput {
+    pub user_id: UserId,
+    pub kind: String,
+    pub title: String,
+    pub body: Option<String>,
+    pub link: Option<String>,
+}
+
+#[async_trait]
+pub trait NotificationRepository: Send + Sync {
+    /// One user's notifications, newest first.
+    async fn for_user(
+        &self,
+        scope: TenantScope,
+        user: UserId,
+        limit: i64,
+    ) -> PortResult<Vec<Notification>>;
+
+    async fn unread_count(&self, scope: TenantScope, user: UserId) -> PortResult<i64>;
+
+    /// Marks one as read. `false` if it is not this user's.
+    async fn mark_read(
+        &self,
+        scope: TenantScope,
+        user: UserId,
+        id: NotificationId,
+    ) -> PortResult<bool>;
+
+    async fn mark_all_read(&self, scope: TenantScope, user: UserId) -> PortResult<i64>;
+
+    /// Raises notifications for several users at once.
+    ///
+    /// Batched because one diary note can notify every manager on a job, and a
+    /// row per statement would make that N round-trips.
+    async fn create_many(
+        &self,
+        scope: TenantScope,
+        inputs: &[NotificationInput],
+    ) -> PortResult<Vec<Notification>>;
+
+    async fn prefs(&self, scope: TenantScope, user: UserId) -> PortResult<NotificationPrefs>;
+
+    async fn set_prefs(
+        &self,
+        scope: TenantScope,
+        user: UserId,
+        prefs: NotificationPrefs,
+    ) -> PortResult<NotificationPrefs>;
+
+    async fn save_subscription(
+        &self,
+        scope: TenantScope,
+        user: UserId,
+        sub: &PushSubscription,
+    ) -> PortResult<()>;
+
+    async fn remove_subscription(
+        &self,
+        scope: TenantScope,
+        user: UserId,
+        endpoint: &str,
+    ) -> PortResult<bool>;
+
+    /// Subscriptions to deliver to, for the push worker.
+    async fn subscriptions_for(
+        &self,
+        scope: TenantScope,
+        users: &[UserId],
+    ) -> PortResult<Vec<(UserId, PushSubscription)>>;
+}

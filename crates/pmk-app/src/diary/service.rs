@@ -8,6 +8,7 @@ use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId};
 use pmk_domain::DomainError;
 use pmk_ports::repository::{DiaryFilter, DiaryRepository, JobRepository, WeatherProvider};
 use pmk_ports::Clock;
+use pmk_ports::{BroadcastEvent, EventBus};
 
 use crate::identity::SessionUser;
 use crate::{AppError, AppResult};
@@ -17,6 +18,9 @@ pub struct DiaryService {
     jobs: Arc<dyn JobRepository>,
     weather: Option<Arc<dyn WeatherProvider>>,
     clock: Arc<dyn Clock>,
+    /// Optional so the service is constructible in tests without a database
+    /// listener behind it.
+    events: Option<Arc<dyn EventBus>>,
 }
 
 impl std::fmt::Debug for DiaryService {
@@ -32,12 +36,14 @@ impl DiaryService {
         jobs: Arc<dyn JobRepository>,
         weather: Option<Arc<dyn WeatherProvider>>,
         clock: Arc<dyn Clock>,
+        events: Option<Arc<dyn EventBus>>,
     ) -> Self {
         Self {
             diary,
             jobs,
             weather,
             clock,
+            events,
         }
     }
 
@@ -156,6 +162,27 @@ impl DiaryService {
             .ok_or_else(|| AppError::Domain(DomainError::not_found("Diary entry")))
     }
 
+    /// Tells connected clients a job's diary changed.
+    ///
+    /// Best effort: a failure to broadcast is logged and swallowed, because
+    /// the write has already committed and failing the request would tell the
+    /// user their entry was not saved when it was. The UI refetches on
+    /// reconnect, so a missed event costs a delay rather than data.
+    async fn announce(&self, s: &SessionUser, job: JobId, entry: DiaryEntryId) {
+        let Some(bus) = &self.events else { return };
+        let event = BroadcastEvent::for_job(
+            s.principal.company_id(),
+            job,
+            "site-diary",
+            "read",
+            "diary_note_updated",
+            serde_json::json!({ "entryId": entry.get(), "jobId": job.get() }),
+        );
+        if let Err(e) = bus.publish(&event).await {
+            tracing::warn!(error = %e, "could not broadcast a diary change");
+        }
+    }
+
     // ── notes ───────────────────────────────────────────────────────────────
 
     pub async fn notes(
@@ -177,12 +204,14 @@ impl DiaryService {
         entry: DiaryEntryId,
         input: DiaryNoteInput,
     ) -> AppResult<DiaryNote> {
-        self.get(s, entry).await?;
+        let parent = self.get(s, entry).await?;
         input.validate().map_err(AppError::Domain)?;
-        Ok(self
+        let note = self
             .diary
             .add_note(s.principal.scope(), entry, &input, Some(s.user.id))
-            .await?)
+            .await?;
+        self.announce(s, parent.job_id, entry).await;
+        Ok(note)
     }
 
     pub async fn update_note(
@@ -192,12 +221,15 @@ impl DiaryService {
         note: DiaryNoteId,
         input: DiaryNoteInput,
     ) -> AppResult<DiaryNote> {
-        self.get(s, entry).await?;
+        let parent = self.get(s, entry).await?;
         input.validate().map_err(AppError::Domain)?;
-        self.diary
+        let updated = self
+            .diary
             .update_note(s.principal.scope(), note, &input)
             .await?
-            .ok_or_else(|| AppError::Domain(DomainError::not_found("Note")))
+            .ok_or_else(|| AppError::Domain(DomainError::not_found("Note")))?;
+        self.announce(s, parent.job_id, entry).await;
+        Ok(updated)
     }
 
     pub async fn set_note_action_status(
@@ -207,11 +239,14 @@ impl DiaryService {
         note: DiaryNoteId,
         status: Option<ActionStatus>,
     ) -> AppResult<DiaryNote> {
-        self.get(s, entry).await?;
-        self.diary
+        let parent = self.get(s, entry).await?;
+        let updated = self
+            .diary
             .set_note_action_status(s.principal.scope(), note, status, Some(s.user.id))
             .await?
-            .ok_or_else(|| AppError::Domain(DomainError::not_found("Note")))
+            .ok_or_else(|| AppError::Domain(DomainError::not_found("Note")))?;
+        self.announce(s, parent.job_id, entry).await;
+        Ok(updated)
     }
 
     pub async fn set_note_archived(

@@ -14,6 +14,7 @@ pub mod forms;
 pub mod identity;
 pub mod jobs;
 pub mod media;
+pub mod notifications;
 pub mod progress;
 pub mod reports;
 pub mod scheduler;

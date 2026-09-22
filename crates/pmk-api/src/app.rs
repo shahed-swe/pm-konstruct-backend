@@ -55,6 +55,8 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/dashboard", routes::dashboard::router())
         .nest("/progress", routes::progress::router())
         .nest("/reports", routes::reports::router())
+        .nest("/notifications", routes::notifications::router())
+        .nest("/events", routes::events::router())
         // Kept at the top level, as the legacy had it, even though it is a
         // report -- the frontend's URL is part of the contract.
         .nest(

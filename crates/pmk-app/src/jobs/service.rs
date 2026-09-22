@@ -32,6 +32,18 @@ impl JobService {
         Self { jobs, tasks, links }
     }
 
+    /// Job ids this caller may see (domain-rules R3).
+    ///
+    /// Managers and office users see every job in the company, so this returns
+    /// the full list for them too rather than a sentinel -- callers that need
+    /// to distinguish the two ask the role.
+    pub async fn visible_job_ids(&self, s: &SessionUser) -> AppResult<Vec<JobId>> {
+        Ok(self
+            .jobs
+            .visible_job_ids(s.principal.scope(), s.user.id)
+            .await?)
+    }
+
     pub async fn list(&self, s: &SessionUser, filter: JobFilter) -> AppResult<Vec<Job>> {
         Ok(self
             .jobs

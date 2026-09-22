@@ -21,6 +21,7 @@ pub struct Config {
     pub storage: StorageConfig,
     pub tenancy: TenancyConfig,
     pub telemetry: TelemetryConfig,
+    pub notifications: NotificationsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +85,20 @@ pub struct TenancyConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationsConfig {
+    /// Handed to the browser so it can create a push subscription. Public by
+    /// design; the private half never leaves the server.
+    ///
+    /// Empty means push is simply not offered, which is not an error -- the
+    /// app works without it, and it has never been configured in production.
+    pub vapid_public_key: String,
+    /// Signs push messages. Never logged and never served.
+    pub vapid_private_key: String,
+    /// The `mailto:` the push services contact about delivery problems.
+    pub vapid_subject: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetryConfig {
     pub json_logs: bool,
     pub otlp_endpoint: Option<String>,
@@ -131,6 +146,11 @@ impl Default for Config {
                 json_logs: false,
                 otlp_endpoint: None,
                 service_name: "pmk-api".into(),
+            },
+            notifications: NotificationsConfig {
+                vapid_public_key: String::new(),
+                vapid_private_key: String::new(),
+                vapid_subject: "mailto:admin@pmkonstruct.com.au".into(),
             },
         }
     }
