@@ -142,6 +142,16 @@ impl From<PortError> for ApiError {
                     .as_deref()
                     .map_or_else(|| "Conflict".to_string(), constraint_message),
             ),
+            PortError::CheckViolation { ref constraint } => {
+                let (message, field) = constraint
+                    .as_deref()
+                    .map_or_else(|| ("Invalid value".to_string(), None), check_message);
+                let mut err = ApiError::new(StatusCode::BAD_REQUEST, message);
+                if let Some(f) = field {
+                    err = err.with_field(f);
+                }
+                err
+            }
             PortError::Unavailable { service, .. } => ApiError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 format!("{service} is temporarily unavailable"),
@@ -192,6 +202,54 @@ impl From<AppError> for ApiError {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
             }
         }
+    }
+}
+
+/// Maps a CHECK constraint to a message and the request field it came from.
+///
+/// These back up the domain-layer validation: the domain should reject bad
+/// input first with a better message, so reaching here means a gap in that
+/// validation. It must still be a 400, never a 500.
+fn check_message(constraint: &str) -> (String, Option<String>) {
+    match constraint {
+        "job_tasks_status_check" => (
+            "Task status must be one of pending, in_progress, completed".into(),
+            Some("status".into()),
+        ),
+        "jobs_status_check" => (
+            "Job status must be one of active, completed, archived, on_hold".into(),
+            Some("status".into()),
+        ),
+        "users_role_check" => (
+            "Role must be one of MANAGER, SUPERVISOR, OFFICE".into(),
+            Some("role".into()),
+        ),
+        "diary_notes_category_check" => (
+            "That note category is not recognised".into(),
+            Some("category".into()),
+        ),
+        "call_forward_item_type_check" => (
+            "Item type must be one of HEADER, STAGE_CLAIM, TASK".into(),
+            Some("itemType".into()),
+        ),
+        "call_forward_status_check" => (
+            "Status must be one of not_started, in_progress, completed, on_hold".into(),
+            Some("status".into()),
+        ),
+        "jobs_date_order_check" => (
+            "The end date must be on or after the start date".into(),
+            Some("endDate".into()),
+        ),
+        "progress_percent_range_check" => (
+            "Percent complete must be between 0 and 100".into(),
+            Some("percentComplete".into()),
+        ),
+        "scheduler_worker_absence_dates_check" => (
+            "The absence end date must be on or after its start date".into(),
+            Some("endDate".into()),
+        ),
+        // Unmapped: still a 400, but without echoing the constraint name.
+        _ => ("Invalid value".into(), None),
     }
 }
 
@@ -305,6 +363,28 @@ mod tests {
             e.body.error,
             "A job with this number already exists for your company"
         );
+    }
+
+    #[test]
+    fn a_check_violation_is_a_400_not_a_500() {
+        let e: ApiError = PortError::CheckViolation {
+            constraint: Some("job_tasks_status_check".into()),
+        }
+        .into();
+        assert_eq!(e.status, StatusCode::BAD_REQUEST);
+        assert_eq!(e.body.field.as_deref(), Some("status"));
+        assert!(e.body.error.contains("pending"));
+    }
+
+    #[test]
+    fn an_unmapped_check_violation_is_still_a_400_and_leaks_nothing() {
+        let e: ApiError = PortError::CheckViolation {
+            constraint: Some("some_internal_check_7".into()),
+        }
+        .into();
+        assert_eq!(e.status, StatusCode::BAD_REQUEST);
+        assert_eq!(e.body.error, "Invalid value");
+        assert!(!e.body.error.contains("some_internal_check_7"));
     }
 
     #[test]

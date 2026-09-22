@@ -168,11 +168,8 @@ pub(crate) fn map_sqlx(e: sqlx::Error) -> PortError {
             match code.as_str() {
                 // unique_violation | exclusion_violation | foreign_key_violation
                 "23505" | "23P01" | "23503" => PortError::Conflict { constraint },
-                // check_violation
-                "23514" => PortError::Storage(format!(
-                    "check constraint {} violated",
-                    constraint.unwrap_or_else(|| "?".into())
-                )),
+                // check_violation -- bad input, surfaced as 400 by the API
+                "23514" => PortError::CheckViolation { constraint },
                 _ => PortError::Storage(e.to_string()),
             }
         }

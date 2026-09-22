@@ -43,7 +43,9 @@ pub fn build_router(state: AppState) -> Router {
 
     let api = Router::new()
         .merge(routes::health::router())
-        .nest("/auth", routes::auth::router());
+        .nest("/auth", routes::auth::router())
+        .nest("/jobs", routes::jobs::router())
+        .nest("/tasks", routes::jobs::tasks_router());
 
     Router::new()
         .nest("/api", api)

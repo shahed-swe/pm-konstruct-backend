@@ -14,6 +14,11 @@ pub enum PortError {
     #[error("conflict{}", .constraint.as_ref().map(|c| format!(" ({c})")).unwrap_or_default())]
     Conflict { constraint: Option<String> },
 
+    /// A CHECK constraint rejected the value. This is bad input, not an
+    /// internal failure, so it must never surface as a 500.
+    #[error("invalid value{}", .constraint.as_ref().map(|c| format!(" ({c})")).unwrap_or_default())]
+    CheckViolation { constraint: Option<String> },
+
     #[error("storage: {0}")]
     Storage(String),
 

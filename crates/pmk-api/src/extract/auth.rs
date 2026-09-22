@@ -180,7 +180,7 @@ permission!(TradeSchedulerWrite, "trade-scheduler", "write");
 /// `requireManagerSupervisorOrPermission`, which despite their names behave
 /// identically in the legacy code.
 #[derive(Debug, Clone)]
-pub struct RequirePermission<P: PermissionSpec>(pub SessionUser, std::marker::PhantomData<P>);
+pub struct RequirePermission<P: PermissionSpec>(pub SessionUser, pub std::marker::PhantomData<P>);
 
 impl<P: PermissionSpec> std::ops::Deref for RequirePermission<P> {
     type Target = SessionUser;

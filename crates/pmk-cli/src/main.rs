@@ -5,7 +5,7 @@
 //! `SCHEMA_VERSION` integer, with no advisory lock, so two instances starting
 //! together raced on the same DDL (Analysis 4.2).
 
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use clap::{Parser, Subcommand};
 use pmk_infra::config::Config;

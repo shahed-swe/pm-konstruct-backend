@@ -7,7 +7,10 @@ use pmk_api::{build_router, AppState};
 use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
-use pmk_infra::repo::{PgBillingRepository, PgRefreshTokenRepository, PgUserRepository};
+use pmk_infra::repo::{
+    PgBillingRepository, PgJobRepository, PgJobTaskRepository, PgRefreshTokenRepository,
+    PgUserRepository,
+};
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
 
@@ -42,10 +45,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.refresh_ttl(),
     )?);
 
+    let jobs = Arc::new(pmk_app::jobs::JobService::new(
+        Arc::new(PgJobRepository::new(pool.clone())),
+        Arc::new(PgJobTaskRepository::new(pool.clone())),
+    ));
+
     let state = AppState {
         clock: Arc::new(SystemClock::new(config.timezone())),
         config: Arc::new(config.clone()),
         auth,
+        jobs,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };

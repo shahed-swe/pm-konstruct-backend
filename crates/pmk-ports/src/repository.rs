@@ -95,3 +95,127 @@ impl Entitlement {
 pub trait BillingRepository: Send + Sync {
     async fn entitlement(&self, company: CompanyId) -> PortResult<Entitlement>;
 }
+
+// ── jobs ────────────────────────────────────────────────────────────────────
+
+use pmk_domain::ids::JobId;
+use pmk_domain::job::{Job, JobAssignment, JobInput};
+
+/// Filters for the job list, mirroring the legacy query parameters.
+#[derive(Debug, Clone, Default)]
+pub struct JobFilter {
+    pub status: Option<String>,
+    pub supervisor_id: Option<UserId>,
+    pub search: Option<String>,
+}
+
+#[async_trait]
+pub trait JobRepository: Send + Sync {
+    /// Jobs the caller may see.
+    ///
+    /// Visibility (domain-rules R3) is applied **inside** the query rather than
+    /// filtered afterwards, so a caller cannot receive rows it should not see
+    /// even transiently.
+    async fn list_visible(
+        &self,
+        scope: TenantScope,
+        viewer: UserId,
+        viewer_sees_all: bool,
+        filter: &JobFilter,
+    ) -> PortResult<Vec<Job>>;
+
+    async fn find(
+        &self,
+        scope: TenantScope,
+        viewer: UserId,
+        viewer_sees_all: bool,
+        id: JobId,
+    ) -> PortResult<Option<Job>>;
+
+    async fn create(&self, scope: TenantScope, input: &JobInput) -> PortResult<Job>;
+
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: JobId,
+        input: &JobInput,
+    ) -> PortResult<Option<Job>>;
+
+    async fn delete(&self, scope: TenantScope, id: JobId) -> PortResult<bool>;
+
+    async fn assignments(&self, scope: TenantScope, id: JobId) -> PortResult<Vec<JobAssignment>>;
+
+    /// Adds an assignment and re-syncs `jobs.supervisor_id` in one transaction.
+    ///
+    /// The legacy `setPrimary` performed three un-transactioned writes and
+    /// could leave a job with two primaries or none (domain-rules R4).
+    async fn add_assignment(
+        &self,
+        scope: TenantScope,
+        id: JobId,
+        user: UserId,
+        primary: bool,
+    ) -> PortResult<Vec<JobAssignment>>;
+
+    async fn remove_assignment(
+        &self,
+        scope: TenantScope,
+        id: JobId,
+        user: UserId,
+    ) -> PortResult<Vec<JobAssignment>>;
+
+    async fn set_primary_assignment(
+        &self,
+        scope: TenantScope,
+        id: JobId,
+        user: UserId,
+    ) -> PortResult<Vec<JobAssignment>>;
+
+    /// Job ids a supervisor may see: assignments UNION primary-supervisor jobs.
+    async fn visible_job_ids(&self, scope: TenantScope, viewer: UserId) -> PortResult<Vec<JobId>>;
+}
+
+/// A row of `job_tasks`.
+#[derive(Debug, Clone)]
+pub struct JobTask {
+    pub id: i32,
+    pub job_id: JobId,
+    pub title: String,
+    pub status: String,
+    pub notes: Option<String>,
+    pub sort_order: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct JobTaskInput {
+    pub title: String,
+    pub status: Option<String>,
+    pub notes: Option<String>,
+    pub sort_order: Option<i32>,
+}
+
+#[async_trait]
+pub trait JobTaskRepository: Send + Sync {
+    async fn list(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<JobTask>>;
+    async fn create(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        input: &JobTaskInput,
+    ) -> PortResult<JobTask>;
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: i32,
+        input: &JobTaskInput,
+    ) -> PortResult<Option<JobTask>>;
+    async fn update_notes(
+        &self,
+        scope: TenantScope,
+        id: i32,
+        notes: Option<&str>,
+    ) -> PortResult<Option<JobTask>>;
+    async fn delete(&self, scope: TenantScope, id: i32) -> PortResult<bool>;
+}
