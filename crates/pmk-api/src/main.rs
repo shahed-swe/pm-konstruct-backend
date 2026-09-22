@@ -186,7 +186,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(PgBillingRepository::new(pool.clone())),
         stripe,
         pmk_app::billing::ReturnUrls {
-            success: format!("{}/billing?checkout=success", config.billing.app_url),
+            // `{CHECKOUT_SESSION_ID}` is substituted by Stripe. Without it
+            // the page has nothing to confirm with and has to wait for the
+            // webhook before it can show the new state.
+            success: format!(
+                "{}/billing?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+                config.billing.app_url
+            ),
             cancel: format!("{}/billing?checkout=cancelled", config.billing.app_url),
             portal_return: format!("{}/billing", config.billing.app_url),
         },
