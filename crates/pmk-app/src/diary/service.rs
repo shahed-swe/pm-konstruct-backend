@@ -10,8 +10,7 @@ use pmk_domain::email::{
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId};
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
-    DiaryContext, DiaryFilter, DiaryRepository, JobRepository, UserRepository, WeatherProvider,
-    WeatherSnapshot,
+    DiaryContext, DiaryFilter, DiaryRepository, JobRepository, UserRepository, WeatherSnapshot,
 };
 use pmk_ports::Clock;
 use pmk_ports::{BroadcastEvent, EventBus, Message};
@@ -33,7 +32,6 @@ pub struct DiaryEntryView {
 pub struct DiaryService {
     diary: Arc<dyn DiaryRepository>,
     jobs: Arc<dyn JobRepository>,
-    weather: Option<Arc<dyn WeatherProvider>>,
     clock: Arc<dyn Clock>,
     /// Optional so the service is constructible in tests without a database
     /// listener behind it.
@@ -54,7 +52,6 @@ impl DiaryService {
     pub fn new(
         diary: Arc<dyn DiaryRepository>,
         jobs: Arc<dyn JobRepository>,
-        weather: Option<Arc<dyn WeatherProvider>>,
         clock: Arc<dyn Clock>,
         events: Option<Arc<dyn EventBus>>,
         users: Arc<dyn UserRepository>,
@@ -63,7 +60,6 @@ impl DiaryService {
         Self {
             diary,
             jobs,
-            weather,
             clock,
             events,
             users,
@@ -138,7 +134,36 @@ impl DiaryService {
         })
     }
 
+    /// Creates an entry, stamping it with the weather the client captured.
+    ///
+    /// The client supplies the reading because only the browser knows where
+    /// the supervisor is standing: a job's address is a postal address, not
+    /// a set of coordinates, and one job can cover several lots. When the
+    /// client captured nothing -- location refused, service unconfigured --
+    /// the entry is written without a stamp rather than refused.
+    pub async fn create_stamped(
+        &self,
+        s: &SessionUser,
+        input: DiaryEntryInput,
+        captured: Option<WeatherStamp>,
+    ) -> AppResult<DiaryEntry> {
+        match captured {
+            Some(stamp) => self.create_with_weather(s, input, stamp).await,
+            None => self.create(s, input).await,
+        }
+    }
+
     pub async fn create(&self, s: &SessionUser, input: DiaryEntryInput) -> AppResult<DiaryEntry> {
+        self.create_with_weather(s, input, WeatherStamp::default())
+            .await
+    }
+
+    async fn create_with_weather(
+        &self,
+        s: &SessionUser,
+        input: DiaryEntryInput,
+        weather: WeatherStamp,
+    ) -> AppResult<DiaryEntry> {
         input.validate().map_err(AppError::Domain)?;
 
         // The caller must be able to see the job it is filing against.
@@ -152,8 +177,6 @@ impl DiaryService {
             .await?
             .ok_or_else(|| AppError::Domain(DomainError::not_found("Job")))?;
 
-        let weather = self.stamp_weather().await;
-
         Ok(self
             .diary
             .create(
@@ -164,25 +187,6 @@ impl DiaryService {
                 self.clock.today(),
             )
             .await?)
-    }
-
-    /// Fetches the weather stamp, swallowing any failure.
-    ///
-    /// Domain-rules R8: a weather outage must never stop a supervisor filing
-    /// the day's diary. The entry saves with null weather fields instead.
-    async fn stamp_weather(&self) -> WeatherStamp {
-        let Some(provider) = &self.weather else {
-            return WeatherStamp::default();
-        };
-        // Coordinates come from the job site in Phase 14; until then the
-        // provider is absent and this is a no-op.
-        match provider.current(0.0, 0.0).await {
-            Ok(w) => w,
-            Err(e) => {
-                tracing::warn!(error = %e, "weather lookup failed; entry saved without a stamp");
-                WeatherStamp::default()
-            }
-        }
     }
 
     pub async fn update(

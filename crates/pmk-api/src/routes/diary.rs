@@ -77,7 +77,8 @@ async fn create(
     RequirePermission(session, ..): RequirePermission<SiteDiaryWrite>,
     Json(req): Json<DiaryEntryRequest>,
 ) -> Result<(StatusCode, Json<DiaryEntryDto>), ApiError> {
-    let entry = state.diary.create(&session, req.into_input()?).await?;
+    let (input, captured) = req.split()?;
+    let entry = state.diary.create_stamped(&session, input, captured).await?;
     Ok((StatusCode::CREATED, Json(entry.into())))
 }
 

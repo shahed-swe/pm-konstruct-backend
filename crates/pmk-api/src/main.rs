@@ -95,10 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let diary = Arc::new(pmk_app::diary::DiaryService::new(
         Arc::new(PgDiaryRepository::new(pool.clone())),
         job_repo,
-        // `None` when no API key is configured. Either way a failure here
-        // never blocks the write: the entry saves without a stamp, which is
-        // the degradation R8 requires (see DiaryService::create).
-        weather_provider.clone(),
+        // No weather provider here. The stamp comes from the client, which
+        // is the only party that knows where the supervisor is standing --
+        // the provider is used by `/weather`, which the browser calls first.
         clock.clone(),
         Some(events.clone()),
         Arc::new(PgUserRepository::new(pool.clone())),

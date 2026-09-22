@@ -135,6 +135,71 @@ pub struct DiaryEntryRequest {
     pub issues: Option<String>,
     pub notes: Option<String>,
     pub action_status: Option<String>,
+
+    /// The weather where the supervisor is standing, captured by the browser
+    /// when the entry is written.
+    ///
+    /// Sent by the client rather than looked up by the server, because the
+    /// server has no way to know which site somebody is on -- a job's address
+    /// is a postal address, not a set of coordinates, and a supervisor may be
+    /// standing on any of several lots. The browser has the location; the
+    /// server has the API key. Both are needed.
+    ///
+    /// Frozen once written (domain-rules R8): it is a record of the
+    /// conditions that day, never refreshed.
+    #[serde(flatten)]
+    pub weather_stamp: WeatherStampRequest,
+}
+
+/// The reading the client captured, if it managed to.
+///
+/// Every field is optional: location can be refused, the weather service can
+/// be unconfigured or down, and none of that may stop a supervisor filing
+/// the day's diary.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherStampRequest {
+    pub location_name: Option<String>,
+    pub location_lat: Option<f64>,
+    pub location_lng: Option<f64>,
+    pub temperature: Option<f64>,
+    pub weather_condition: Option<String>,
+    pub weather_icon: Option<String>,
+    pub wind_speed_kmh: Option<f64>,
+    pub rainfall_mm: Option<f64>,
+    pub sunrise_time: Option<String>,
+    pub sunset_time: Option<String>,
+}
+
+impl WeatherStampRequest {
+    /// Whether the client managed to capture anything at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.location_name.is_none()
+            && self.temperature.is_none()
+            && self.weather_condition.is_none()
+            && self.location_lat.is_none()
+    }
+
+    /// The domain stamp. Decimals are stored, so the f64s convert here.
+    #[must_use]
+    pub fn into_stamp(self) -> pmk_domain::diary::WeatherStamp {
+        use rust_decimal::prelude::FromPrimitive;
+        let dec = |v: Option<f64>| v.and_then(rust_decimal::Decimal::from_f64);
+
+        pmk_domain::diary::WeatherStamp {
+            location_name: self.location_name,
+            location_lat: dec(self.location_lat),
+            location_lng: dec(self.location_lng),
+            temperature: dec(self.temperature),
+            weather_condition: self.weather_condition,
+            weather_icon: self.weather_icon,
+            wind_speed_kmh: dec(self.wind_speed_kmh),
+            rainfall_mm: dec(self.rainfall_mm),
+            sunrise_time: self.sunrise_time,
+            sunset_time: self.sunset_time,
+        }
+    }
 }
 
 impl DiaryEntryRequest {
@@ -156,6 +221,19 @@ impl DiaryEntryRequest {
             notes: self.notes,
             action_status: parse_action(self.action_status.as_deref())?,
         })
+    }
+
+    /// Splits the body into the entry's own fields and its weather stamp.
+    pub fn split(
+        mut self,
+    ) -> Result<(DiaryEntryInput, Option<pmk_domain::diary::WeatherStamp>), DomainError> {
+        let captured = std::mem::take(&mut self.weather_stamp);
+        let stamp = if captured.is_empty() {
+            None
+        } else {
+            Some(captured.into_stamp())
+        };
+        Ok((self.into_input()?, stamp))
     }
 }
 
