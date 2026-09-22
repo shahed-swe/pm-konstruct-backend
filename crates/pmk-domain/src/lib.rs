@@ -10,6 +10,7 @@
 
 pub mod access;
 pub mod call_forward;
+pub mod diary;
 pub mod error;
 pub mod identity;
 pub mod ids;

@@ -26,3 +26,4 @@ bcrypt.workspace = true
 rand.workspace = true
 sha2.workspace = true
 hex.workspace = true
+rust_decimal.workspace = true

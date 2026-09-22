@@ -4,7 +4,9 @@
 //! golden fixtures match without a translation layer.
 
 pub mod auth;
+pub mod diary;
 pub mod job;
 
 pub use auth::*;
+pub use diary::*;
 pub use job::*;

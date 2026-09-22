@@ -219,3 +219,132 @@ pub trait JobTaskRepository: Send + Sync {
     ) -> PortResult<Option<JobTask>>;
     async fn delete(&self, scope: TenantScope, id: i32) -> PortResult<bool>;
 }
+
+// ── site diary ──────────────────────────────────────────────────────────────
+
+use pmk_domain::diary::{
+    ActionStatus, DiaryEntry, DiaryEntryInput, DiaryNote, DiaryNoteComment, DiaryNoteInput,
+    WeatherStamp,
+};
+use pmk_domain::ids::{DiaryEntryId, DiaryNoteId};
+
+#[derive(Debug, Clone, Default)]
+pub struct DiaryFilter {
+    pub job_id: Option<JobId>,
+    pub from: Option<chrono::NaiveDate>,
+    pub to: Option<chrono::NaiveDate>,
+    pub action_status: Option<String>,
+}
+
+#[async_trait]
+pub trait DiaryRepository: Send + Sync {
+    /// Entries on jobs the caller may see. `visible_jobs` is `None` for roles
+    /// with company-wide access, otherwise the resolved id set (R3).
+    async fn list(
+        &self,
+        scope: TenantScope,
+        visible_jobs: Option<&[JobId]>,
+        filter: &DiaryFilter,
+    ) -> PortResult<Vec<DiaryEntry>>;
+
+    async fn find(
+        &self,
+        scope: TenantScope,
+        visible_jobs: Option<&[JobId]>,
+        id: DiaryEntryId,
+    ) -> PortResult<Option<DiaryEntry>>;
+
+    /// Creates an entry. The weather stamp is frozen at creation and never
+    /// refreshed (domain-rules R8).
+    async fn create(
+        &self,
+        scope: TenantScope,
+        author: UserId,
+        input: &DiaryEntryInput,
+        weather: &WeatherStamp,
+        today: chrono::NaiveDate,
+    ) -> PortResult<DiaryEntry>;
+
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: DiaryEntryId,
+        input: &DiaryEntryInput,
+    ) -> PortResult<Option<DiaryEntry>>;
+
+    async fn delete(&self, scope: TenantScope, id: DiaryEntryId) -> PortResult<bool>;
+
+    async fn set_action_status(
+        &self,
+        scope: TenantScope,
+        id: DiaryEntryId,
+        status: Option<ActionStatus>,
+        raised_by: Option<UserId>,
+    ) -> PortResult<Option<DiaryEntry>>;
+
+    // -- notes ---------------------------------------------------------------
+
+    async fn notes(
+        &self,
+        scope: TenantScope,
+        entry: DiaryEntryId,
+        include_archived: bool,
+    ) -> PortResult<Vec<DiaryNote>>;
+
+    async fn add_note(
+        &self,
+        scope: TenantScope,
+        entry: DiaryEntryId,
+        input: &DiaryNoteInput,
+        raised_by: Option<UserId>,
+    ) -> PortResult<DiaryNote>;
+
+    async fn update_note(
+        &self,
+        scope: TenantScope,
+        note: DiaryNoteId,
+        input: &DiaryNoteInput,
+    ) -> PortResult<Option<DiaryNote>>;
+
+    async fn set_note_action_status(
+        &self,
+        scope: TenantScope,
+        note: DiaryNoteId,
+        status: Option<ActionStatus>,
+        raised_by: Option<UserId>,
+    ) -> PortResult<Option<DiaryNote>>;
+
+    async fn set_note_archived(
+        &self,
+        scope: TenantScope,
+        note: DiaryNoteId,
+        archived: bool,
+    ) -> PortResult<Option<DiaryNote>>;
+
+    async fn delete_note(&self, scope: TenantScope, note: DiaryNoteId) -> PortResult<bool>;
+
+    // -- comment threads -----------------------------------------------------
+
+    async fn comments(
+        &self,
+        scope: TenantScope,
+        note: DiaryNoteId,
+    ) -> PortResult<Vec<DiaryNoteComment>>;
+
+    async fn add_comment(
+        &self,
+        scope: TenantScope,
+        note: DiaryNoteId,
+        author: UserId,
+        content: &str,
+    ) -> PortResult<DiaryNoteComment>;
+}
+
+/// Current conditions for the weather stamp.
+///
+/// A failure here must never block entry creation (domain-rules R8), so the
+/// service treats any error as "no stamp" rather than propagating it.
+#[async_trait]
+pub trait WeatherProvider: Send + Sync {
+    async fn current(&self, lat: f64, lon: f64) -> PortResult<WeatherStamp>;
+}

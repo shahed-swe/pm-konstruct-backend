@@ -45,6 +45,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(routes::health::router())
         .nest("/auth", routes::auth::router())
         .nest("/jobs", routes::jobs::router())
+        .nest("/site-diary", routes::diary::router())
         .nest("/tasks", routes::jobs::tasks_router());
 
     Router::new()

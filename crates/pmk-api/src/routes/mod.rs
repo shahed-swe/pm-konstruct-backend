@@ -2,5 +2,6 @@
 //! `artifacts/api-server/src/routes/`.
 
 pub mod auth;
+pub mod diary;
 pub mod health;
 pub mod jobs;

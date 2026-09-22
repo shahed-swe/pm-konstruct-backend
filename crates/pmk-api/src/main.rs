@@ -8,8 +8,8 @@ use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
-    PgBillingRepository, PgJobRepository, PgJobTaskRepository, PgRefreshTokenRepository,
-    PgUserRepository,
+    PgBillingRepository, PgDiaryRepository, PgJobRepository, PgJobTaskRepository,
+    PgRefreshTokenRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -45,16 +45,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.refresh_ttl(),
     )?);
 
+    let job_repo = Arc::new(PgJobRepository::new(pool.clone()));
     let jobs = Arc::new(pmk_app::jobs::JobService::new(
-        Arc::new(PgJobRepository::new(pool.clone())),
+        job_repo.clone(),
         Arc::new(PgJobTaskRepository::new(pool.clone())),
+    ));
+    let clock: Arc<dyn pmk_ports::Clock> = Arc::new(SystemClock::new(config.timezone()));
+    let diary = Arc::new(pmk_app::diary::DiaryService::new(
+        Arc::new(PgDiaryRepository::new(pool.clone())),
+        job_repo,
+        // Wired in Phase 14; until then entries save with no weather stamp,
+        // which is the same graceful degradation R8 requires on an outage.
+        None,
+        clock.clone(),
     ));
 
     let state = AppState {
-        clock: Arc::new(SystemClock::new(config.timezone())),
+        clock,
         config: Arc::new(config.clone()),
         auth,
         jobs,
+        diary,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };
