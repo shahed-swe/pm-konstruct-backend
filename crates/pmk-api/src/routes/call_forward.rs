@@ -9,8 +9,7 @@ use pmk_domain::ids::{CallForwardItemId, CallForwardTemplateId, JobId};
 use crate::dto::{
     AppliedDto, ApplyTemplateRequest, BulkCreateRequest, CallForwardDto, CallForwardListQuery,
     CallForwardPatchRequest, CallForwardRequest, CreateTemplateRequest, RenameTemplateRequest,
-    ReorderRequest,
-    ReorderResponse, TemplateDto, UpcomingQuery,
+    ReorderRequest, ReorderResponse, TemplateDto, UpcomingQuery,
 };
 use crate::error::ApiError;
 use crate::extract::{CallForwardRead, CallForwardWrite, RequirePermission};

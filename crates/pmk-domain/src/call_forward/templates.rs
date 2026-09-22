@@ -259,7 +259,10 @@ mod tests {
         let rows = vec![ordered(1, Some(2), 1), ordered(2, Some(1), 2)];
         let items = capture(&rows);
         assert_eq!(items.len(), 2, "no item may be dropped");
-        assert!(validate_items(&items).is_err(), "the cycle must be reported");
+        assert!(
+            validate_items(&items).is_err(),
+            "the cycle must be reported"
+        );
     }
 
     fn item(local: i32, parent: Option<i32>) -> TemplateItem {

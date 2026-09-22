@@ -78,7 +78,10 @@ async fn create(
     Json(req): Json<DiaryEntryRequest>,
 ) -> Result<(StatusCode, Json<DiaryEntryDto>), ApiError> {
     let (input, captured) = req.split()?;
-    let entry = state.diary.create_stamped(&session, input, captured).await?;
+    let entry = state
+        .diary
+        .create_stamped(&session, input, captured)
+        .await?;
     Ok((StatusCode::CREATED, Json(entry.into())))
 }
 

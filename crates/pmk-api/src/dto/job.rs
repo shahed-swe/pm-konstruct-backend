@@ -368,7 +368,10 @@ pub struct JobTaskPatchRequest {
 
 impl JobTaskPatchRequest {
     #[must_use]
-    pub fn apply(self, current: &pmk_ports::repository::JobTask) -> pmk_ports::repository::JobTaskInput {
+    pub fn apply(
+        self,
+        current: &pmk_ports::repository::JobTask,
+    ) -> pmk_ports::repository::JobTaskInput {
         pmk_ports::repository::JobTaskInput {
             title: self.title.unwrap_or_else(|| current.title.clone()),
             status: Some(self.status.unwrap_or_else(|| current.status.clone())),
