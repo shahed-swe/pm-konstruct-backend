@@ -58,8 +58,12 @@ impl JobInput {
     /// this up at the database level -- validation here is for the message, not
     /// for correctness.
     pub fn validate(&self) -> DomainResult<()> {
+        // `name` is absent from this list on purpose. The column is NOT NULL,
+        // but the legacy accepted an empty string and its form marks the
+        // project name optional -- jobs are identified by their number and
+        // their address. Requiring it here would reject a form the product
+        // invites people to submit.
         for (field, value) in [
-            ("name", &self.name),
             ("jobNumber", &self.job_number),
             ("client", &self.client),
             ("address", &self.address),
@@ -144,14 +148,29 @@ mod tests {
         assert!(base().validate().is_ok());
     }
 
+    /// A job with no project name is valid.
+    ///
+    /// The legacy form marks it optional and its API accepted an empty
+    /// string; jobs are identified by their number and their address. An
+    /// earlier version of this validation required it, and the create form
+    /// -- which invites a blank name -- failed with "name is required".
+    #[test]
+    fn a_blank_project_name_is_allowed() {
+        let mut input = base();
+        input.name = "  ".into();
+        assert!(input.validate().is_ok());
+
+        input.name = String::new();
+        assert!(input.validate().is_ok());
+    }
+
     #[test]
     fn required_fields_are_named_individually() {
         for (field, mutate) in [
             (
-                "name",
-                (|i: &mut JobInput| i.name = "  ".into()) as fn(&mut JobInput),
+                "jobNumber",
+                (|i: &mut JobInput| i.job_number = "".into()) as fn(&mut JobInput),
             ),
-            ("jobNumber", |i: &mut JobInput| i.job_number = "".into()),
             ("client", |i: &mut JobInput| i.client = "".into()),
             ("address", |i: &mut JobInput| i.address = "".into()),
         ] {

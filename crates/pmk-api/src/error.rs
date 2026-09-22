@@ -136,12 +136,14 @@ impl From<PortError> for ApiError {
     fn from(e: PortError) -> Self {
         match e {
             PortError::NotFound => ApiError::new(StatusCode::NOT_FOUND, "Not found"),
-            PortError::Conflict { ref constraint } => ApiError::new(
-                StatusCode::CONFLICT,
-                constraint
+            PortError::Conflict { ref constraint } => {
+                let (message, field) = constraint
                     .as_deref()
-                    .map_or_else(|| "Conflict".to_string(), constraint_message),
-            ),
+                    .map_or_else(|| ("Conflict".to_string(), None), constraint_conflict);
+                let mut err = ApiError::new(StatusCode::CONFLICT, message);
+                err.body.field = field;
+                err
+            }
             PortError::CheckViolation { ref constraint } => {
                 let (message, field) = constraint
                     .as_deref()
@@ -266,7 +268,22 @@ fn check_message(constraint: &str) -> (String, Option<String>) {
 /// Names come from `backend/migrations/0003_constraints.sql`; anything
 /// unmapped falls back to a generic conflict rather than exposing the raw
 /// constraint identifier.
-fn constraint_message(constraint: &str) -> String {
+/// The message, and the field the user has to change to resolve it.
+///
+/// Naming the field lets a form put the message beside the input rather than
+/// in a banner above it -- for a duplicate job number, the one thing the user
+/// must edit. A conflict with no obvious single field leaves it unset.
+fn constraint_conflict(constraint: &str) -> (String, Option<String>) {
+    let field = match constraint {
+        "jobs_company_job_number_unique" => Some("jobNumber"),
+        "users_email_unique" | "registration_email_taken" => Some("email"),
+        "registration_company_taken" => Some("companyName"),
+        _ => None,
+    };
+    (constraint_message_text(constraint), field.map(Into::into))
+}
+
+fn constraint_message_text(constraint: &str) -> String {
     match constraint {
         "jobs_company_job_number_unique" => {
             "A job with this number already exists for your company".into()
