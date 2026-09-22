@@ -339,6 +339,8 @@ pub trait JobTaskRepository: Send + Sync {
         job: JobId,
         input: &JobTaskInput,
     ) -> PortResult<JobTask>;
+    /// One task, for a partial update to merge onto.
+    async fn find(&self, scope: TenantScope, id: i32) -> PortResult<Option<JobTask>>;
     async fn update(
         &self,
         scope: TenantScope,

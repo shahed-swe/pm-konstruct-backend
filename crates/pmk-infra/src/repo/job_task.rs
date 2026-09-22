@@ -102,6 +102,18 @@ impl JobTaskRepository for PgJobTaskRepository {
         Ok(row.into())
     }
 
+    async fn find(&self, scope: TenantScope, id: i32) -> PortResult<Option<JobTask>> {
+        let mut tx = self.begin(scope).await?;
+        let sql = format!("SELECT {COLS} FROM job_tasks WHERE id = $1");
+        let row: Option<Row> = sqlx::query_as(&sql)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(row.map(Into::into))
+    }
+
     async fn update(
         &self,
         scope: TenantScope,

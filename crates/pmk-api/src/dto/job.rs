@@ -352,6 +352,32 @@ pub struct JobTaskRequest {
     pub sort_order: Option<i32>,
 }
 
+/// A partial update to a task.
+///
+/// The task list toggles a status or renames a line without sending the
+/// rest, as the legacy allowed. An explicit `null` clears the notes.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobTaskPatchRequest {
+    pub title: Option<String>,
+    pub status: Option<String>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub notes: Option<Option<String>>,
+    pub sort_order: Option<i32>,
+}
+
+impl JobTaskPatchRequest {
+    #[must_use]
+    pub fn apply(self, current: &pmk_ports::repository::JobTask) -> pmk_ports::repository::JobTaskInput {
+        pmk_ports::repository::JobTaskInput {
+            title: self.title.unwrap_or_else(|| current.title.clone()),
+            status: Some(self.status.unwrap_or_else(|| current.status.clone())),
+            notes: self.notes.unwrap_or_else(|| current.notes.clone()),
+            sort_order: Some(self.sort_order.unwrap_or(current.sort_order)),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskNotesRequest {

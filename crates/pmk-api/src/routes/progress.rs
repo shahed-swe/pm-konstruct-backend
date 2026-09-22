@@ -10,7 +10,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use pmk_domain::ids::{JobId, ProgressId};
 
-use crate::dto::{ProgressDto, ProgressListQuery, ProgressRequest};
+use crate::dto::{ProgressDto, ProgressListQuery, ProgressPatchRequest, ProgressRequest};
 use crate::error::ApiError;
 use crate::extract::{Entitled, JobsWrite, RequirePermission};
 use crate::state::AppState;
@@ -43,11 +43,12 @@ async fn update(
     State(state): State<AppState>,
     RequirePermission(session, ..): RequirePermission<JobsWrite>,
     Path(id): Path<i32>,
-    Json(req): Json<ProgressRequest>,
+    Json(req): Json<ProgressPatchRequest>,
 ) -> Result<Json<ProgressDto>, ApiError> {
+    let current = state.progress.get(&session, ProgressId(id)).await?;
     let record = state
         .progress
-        .update(&session, ProgressId(id), &req.into())
+        .update(&session, ProgressId(id), &req.apply(&current))
         .await?;
     Ok(Json(record.into()))
 }

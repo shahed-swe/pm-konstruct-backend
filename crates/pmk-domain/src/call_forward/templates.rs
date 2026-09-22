@@ -95,6 +95,68 @@ pub struct ProgrammeRow {
     pub title: String,
     pub item_type: String,
     pub supplier_trade: Option<String>,
+    /// Ordering among siblings. Not a global position: a tree UI numbers
+    /// each parent's children from one, so two items at different depths can
+    /// share a value.
+    pub sort_order: i32,
+}
+
+/// Walks the programme parent-first, depth-first.
+///
+/// Templates require every parent to appear before its children, and reading
+/// the rows in `sort_order` alone does not guarantee that -- a board that
+/// numbers each parent's children from one will put a child at 1 and its
+/// parent at 7. That produced a capture that failed validation with "a
+/// parent must appear before the item that refers to it", from a programme
+/// that was perfectly valid on screen.
+///
+/// An item whose parent is not in the set is treated as a root rather than
+/// dropped, so a partial programme still captures everything it has.
+#[must_use]
+pub fn in_tree_order(rows: &[ProgrammeRow]) -> Vec<&ProgrammeRow> {
+    use std::collections::{HashMap, HashSet};
+
+    let present: HashSet<i32> = rows.iter().map(|r| r.id).collect();
+    let mut children: HashMap<Option<i32>, Vec<&ProgrammeRow>> = HashMap::new();
+    for row in rows {
+        let parent = row.parent_id.filter(|p| present.contains(p));
+        children.entry(parent).or_default().push(row);
+    }
+    for list in children.values_mut() {
+        list.sort_by_key(|r| (r.sort_order, r.id));
+    }
+
+    // Iterative rather than recursive: a cycle in `parent_id` would blow the
+    // stack, and `parent_id` had no foreign key in the legacy schema.
+    let mut out: Vec<&ProgrammeRow> = Vec::with_capacity(rows.len());
+    let mut emitted: HashSet<i32> = HashSet::new();
+    let mut stack: Vec<&ProgrammeRow> = children
+        .get(&None)
+        .map(|roots| roots.iter().rev().copied().collect())
+        .unwrap_or_default();
+
+    while let Some(row) = stack.pop() {
+        if !emitted.insert(row.id) {
+            continue;
+        }
+        out.push(row);
+        if let Some(kids) = children.get(&Some(row.id)) {
+            for kid in kids.iter().rev() {
+                stack.push(kid);
+            }
+        }
+    }
+
+    // Anything left is part of a cycle. Appending it keeps the capture
+    // lossless; `validate_items` then reports the cycle rather than silently
+    // producing a template with items missing.
+    for row in rows {
+        if !emitted.contains(&row.id) {
+            out.push(row);
+        }
+    }
+
+    out
 }
 
 /// Captures a job's programme as template items.
@@ -103,14 +165,16 @@ pub struct ProgrammeRow {
 /// self-contained and survives the original job being archived.
 #[must_use]
 pub fn capture(rows: &[ProgrammeRow]) -> Vec<TemplateItem> {
+    let ordered = in_tree_order(rows);
     let position = |idx: usize| i32::try_from(idx).unwrap_or(i32::MAX);
-    let positions: std::collections::HashMap<i32, i32> = rows
+    let positions: std::collections::HashMap<i32, i32> = ordered
         .iter()
         .enumerate()
         .map(|(idx, r)| (r.id, position(idx) + 1))
         .collect();
 
-    rows.iter()
+    ordered
+        .iter()
         .enumerate()
         .map(|(idx, r)| TemplateItem {
             local_id: position(idx) + 1,
@@ -143,7 +207,59 @@ mod tests {
             title: title.into(),
             item_type: item_type.into(),
             supplier_trade: supplier_trade.map(Into::into),
+            sort_order: id,
         }
+    }
+
+    fn ordered(id: i32, parent_id: Option<i32>, sort_order: i32) -> ProgrammeRow {
+        ProgrammeRow {
+            sort_order,
+            ..row(id, parent_id, &format!("Item {id}"), "TASK", None)
+        }
+    }
+
+    #[test]
+    fn a_capture_puts_every_parent_before_its_children() {
+        // The board numbers each parent's children from one, so a child can
+        // have a lower sort order than its parent. Reading the rows in that
+        // order made the capture fail validation on a programme that was
+        // perfectly valid on screen.
+        let rows = vec![
+            ordered(10, None, 7),
+            ordered(11, Some(10), 1),
+            ordered(12, Some(10), 2),
+            ordered(20, None, 8),
+        ];
+
+        let items = capture(&rows);
+        assert!(validate_items(&items).is_ok());
+        assert_eq!(
+            items.iter().map(|i| i.title.as_str()).collect::<Vec<_>>(),
+            ["Item 10", "Item 11", "Item 12", "Item 20"],
+        );
+        assert_eq!(items[1].local_parent_id, Some(1));
+        assert_eq!(items[2].local_parent_id, Some(1));
+    }
+
+    #[test]
+    fn an_item_whose_parent_is_missing_is_captured_as_a_root() {
+        // A partial programme, or a parent deleted from under it. Dropping
+        // the item would lose the work the template exists to preserve.
+        let rows = vec![ordered(5, Some(999), 1)];
+        let items = capture(&rows);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].local_parent_id, None);
+    }
+
+    #[test]
+    fn a_cycle_is_reported_rather_than_looping_forever() {
+        // `parent_id` had no foreign key in the legacy schema, so two rows
+        // can point at each other. The capture must terminate and the result
+        // must be rejected, not silently lose items.
+        let rows = vec![ordered(1, Some(2), 1), ordered(2, Some(1), 2)];
+        let items = capture(&rows);
+        assert_eq!(items.len(), 2, "no item may be dropped");
+        assert!(validate_items(&items).is_err(), "the cycle must be reported");
     }
 
     fn item(local: i32, parent: Option<i32>) -> TemplateItem {
@@ -258,6 +374,7 @@ mod tests {
                 title: format!("T{i}"),
                 item_type: "TASK".into(),
                 supplier_trade: None,
+                sort_order: i,
             })
             .collect();
         let items = capture(&rows);

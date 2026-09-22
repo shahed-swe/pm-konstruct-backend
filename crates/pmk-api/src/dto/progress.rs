@@ -48,6 +48,48 @@ pub struct ProgressRequest {
     pub photos: Vec<String>,
 }
 
+/// A partial update to a progress record.
+///
+/// The progress page edits one field at a time -- a percentage nudged, a
+/// milestone named -- and the legacy service copied across only what
+/// arrived.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressPatchRequest {
+    pub date: Option<chrono::NaiveDate>,
+    pub percent_complete: Option<f32>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub milestone: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub description: Option<Option<String>>,
+    pub photos: Option<Vec<String>>,
+}
+
+/// Distinguishes "key absent" from "key present and null".
+fn double_option<'de, D, T>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Deserialize::deserialize(de).map(Some)
+}
+
+impl ProgressPatchRequest {
+    #[must_use]
+    pub fn apply(self, current: &pmk_domain::progress::Progress) -> ProgressInput {
+        ProgressInput {
+            job_id: current.job_id,
+            date: self.date.unwrap_or(current.date),
+            percent_complete: self.percent_complete.unwrap_or(current.percent_complete),
+            milestone: self.milestone.unwrap_or_else(|| current.milestone.clone()),
+            description: self
+                .description
+                .unwrap_or_else(|| current.description.clone()),
+            photos: self.photos.unwrap_or_else(|| current.photos.clone()),
+        }
+    }
+}
+
 impl From<ProgressRequest> for ProgressInput {
     fn from(r: ProgressRequest) -> Self {
         Self {

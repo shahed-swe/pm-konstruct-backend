@@ -83,8 +83,8 @@ impl CallForwardTemplateRepository for PgCallForwardTemplateRepository {
     async fn job_programme(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<ProgrammeRow>> {
         let mut tx = self.begin(scope).await?;
         let rows = sqlx::query(
-            "SELECT id, parent_id, title, item_type, supplier_trade FROM call_forward \
-             WHERE job_id = $1 ORDER BY sort_order, id",
+            "SELECT id, parent_id, title, item_type, supplier_trade, sort_order \
+             FROM call_forward WHERE job_id = $1 ORDER BY sort_order, id",
         )
         .bind(job.get())
         .fetch_all(&mut *tx)
@@ -100,6 +100,7 @@ impl CallForwardTemplateRepository for PgCallForwardTemplateRepository {
                 title: r.get("title"),
                 item_type: r.get("item_type"),
                 supplier_trade: r.get("supplier_trade"),
+                sort_order: r.get("sort_order"),
             })
             .collect())
     }

@@ -9,7 +9,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use pmk_domain::ids::UserId;
 
-use crate::dto::{InviteDto, PermissionDto, RecoveryCodeDto, UserDto, UserRequest};
+use crate::dto::{
+    InviteDto, PermissionDto, RecoveryCodeDto, UserDto, UserPatchRequest, UserRequest,
+};
 use crate::error::ApiError;
 use crate::extract::{ManagerOnly, RequireRole};
 use crate::state::AppState;
@@ -53,11 +55,14 @@ async fn update(
     State(state): State<AppState>,
     RequireRole(session): ManagerOnly,
     Path(id): Path<i32>,
-    Json(req): Json<UserRequest>,
+    Json(req): Json<UserPatchRequest>,
 ) -> Result<Json<UserDto>, ApiError> {
+    // Read first, then merge: the users page deactivates someone by sending
+    // `{"active": false}` alone.
+    let current = state.users.get(&session, UserId(id)).await?;
     let user = state
         .users
-        .update(&session, UserId(id), &req.into_input()?)
+        .update(&session, UserId(id), &req.apply(&current)?)
         .await?;
     Ok(Json((&user).into()))
 }

@@ -13,7 +13,8 @@ use pmk_domain::ids::{JobId, UserId};
 
 use crate::dto::{
     AddAssignmentRequest, AssignmentDto, DeleteJobQuery, JobDto, JobLinkDto, JobLinkRequest,
-    JobListQuery, JobPatchRequest, JobTaskDto, JobTaskRequest, JobUpsertRequest, TaskNotesRequest,
+    JobListQuery, JobPatchRequest, JobTaskDto, JobTaskPatchRequest, JobTaskRequest,
+    JobUpsertRequest, TaskNotesRequest,
 };
 use crate::error::ApiError;
 use crate::extract::{JobsRead, JobsWrite, ManagerOnly, RequirePermission, RequireRole};
@@ -196,16 +197,21 @@ async fn create_task(
     Ok((StatusCode::CREATED, Json(t.into())))
 }
 
+/// Updates a task, merging the body onto what is stored.
+///
+/// Partial, as the legacy was: the task list toggles a status without
+/// sending the title back.
 async fn update_task(
     State(state): State<AppState>,
     RequirePermission(session, ..): RequirePermission<JobsWrite>,
     Path(id): Path<i32>,
-    Json(req): Json<JobTaskRequest>,
+    Json(req): Json<JobTaskPatchRequest>,
 ) -> Result<Json<JobTaskDto>, ApiError> {
+    let current = state.jobs.get_task(&session, id).await?;
     Ok(Json(
         state
             .jobs
-            .update_task(&session, id, to_task_input(req))
+            .update_task(&session, id, req.apply(&current))
             .await?
             .into(),
     ))

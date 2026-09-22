@@ -8,7 +8,8 @@ use pmk_domain::ids::{CallForwardItemId, CallForwardTemplateId, JobId};
 
 use crate::dto::{
     AppliedDto, ApplyTemplateRequest, BulkCreateRequest, CallForwardDto, CallForwardListQuery,
-    CallForwardRequest, CreateTemplateRequest, RenameTemplateRequest, ReorderRequest,
+    CallForwardPatchRequest, CallForwardRequest, CreateTemplateRequest, RenameTemplateRequest,
+    ReorderRequest,
     ReorderResponse, TemplateDto, UpcomingQuery,
 };
 use crate::error::ApiError;
@@ -109,9 +110,16 @@ async fn update(
     State(state): State<AppState>,
     RequirePermission(session, ..): RequirePermission<CallForwardWrite>,
     Path(id): Path<i32>,
-    Json(req): Json<CallForwardRequest>,
+    Json(req): Json<CallForwardPatchRequest>,
 ) -> Result<Json<CallForwardDto>, ApiError> {
-    let (input, _) = req.into_input()?;
+    // Read first, then merge: the board sends one changed field at a time,
+    // and requiring the whole row would overwrite whatever a colleague
+    // changed between their load and this save.
+    let current = state
+        .call_forward
+        .get(&session, CallForwardItemId(id))
+        .await?;
+    let input = req.apply(&current.item)?;
     let item = state
         .call_forward
         .update(&session, CallForwardItemId(id), input)

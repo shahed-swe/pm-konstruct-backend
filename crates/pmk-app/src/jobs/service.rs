@@ -235,6 +235,14 @@ impl JobService {
         Ok(self.tasks.create(s.principal.scope(), job, &input).await?)
     }
 
+    /// One task, so a partial update has something to merge onto.
+    pub async fn get_task(&self, s: &SessionUser, id: i32) -> AppResult<JobTask> {
+        self.tasks
+            .find(s.principal.scope(), id)
+            .await?
+            .ok_or_else(|| AppError::Domain(DomainError::not_found("Task")))
+    }
+
     pub async fn update_task(
         &self,
         s: &SessionUser,

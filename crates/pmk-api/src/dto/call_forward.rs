@@ -3,7 +3,9 @@
 //! `delayStatus` and `delayDays` are computed at read time (domain-rules R1)
 //! and returned alongside the stored fields, exactly as the legacy API did.
 
-use pmk_domain::call_forward::{CallForwardInput, CallForwardItemWithDelay, CfStatus, ItemType};
+use pmk_domain::call_forward::{
+    CallForwardInput, CallForwardItem, CallForwardItemWithDelay, CfStatus, ItemType,
+};
 use pmk_domain::ids::CallForwardItemId;
 use pmk_domain::DomainError;
 use serde::{Deserialize, Serialize};
@@ -77,6 +79,80 @@ pub struct CallForwardRequest {
     /// Index into the same list for bulk creates, so a hierarchy can be
     /// described before any ids exist.
     pub local_parent: Option<usize>,
+}
+
+/// A partial update to a programme item.
+///
+/// `PUT /call-forward/{id}` has always been partial: the legacy service
+/// copied across only the keys that arrived. The board relies on it -- a
+/// supervisor typing one date sends that date, not the whole row -- and
+/// requiring the rest would make each edit a read-modify-write that
+/// overwrites whatever a colleague changed in the meantime.
+///
+/// Absent leaves a field alone; an explicit `null` clears it, which is the
+/// only way to un-set a date that was entered by mistake.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallForwardPatchRequest {
+    pub title: Option<String>,
+    pub item_type: Option<String>,
+    pub status: Option<String>,
+
+    #[serde(default, deserialize_with = "double_option")]
+    pub supplier_trade: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub est_start: Option<Option<chrono::NaiveDate>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub est_finish: Option<Option<chrono::NaiveDate>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub actual_start: Option<Option<chrono::NaiveDate>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub actual_finish: Option<Option<chrono::NaiveDate>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub notes: Option<Option<String>>,
+    pub sort_order: Option<i32>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub parent_id: Option<Option<i32>>,
+}
+
+impl CallForwardPatchRequest {
+    pub fn apply(self, current: &CallForwardItem) -> Result<CallForwardInput, DomainError> {
+        let item_type = match self.item_type.as_deref() {
+            None => Some(current.item_type),
+            Some("") => None,
+            Some(t) => Some(ItemType::parse(t).ok_or_else(|| {
+                DomainError::invalid("itemType", "must be one of HEADER, STAGE_CLAIM, TASK")
+            })?),
+        };
+        let status = match self.status.as_deref() {
+            None => current.status,
+            Some("") => None,
+            Some(s) => Some(CfStatus::parse(s).ok_or_else(|| {
+                DomainError::invalid(
+                    "status",
+                    "must be one of not_started, in_progress, completed, on_hold",
+                )
+            })?),
+        };
+
+        Ok(CallForwardInput {
+            title: self.title.unwrap_or_else(|| current.title.clone()),
+            item_type,
+            supplier_trade: self
+                .supplier_trade
+                .unwrap_or_else(|| current.supplier_trade.clone()),
+            est_start: self.est_start.unwrap_or(current.est_start),
+            est_finish: self.est_finish.unwrap_or(current.est_finish),
+            actual_start: self.actual_start.unwrap_or(current.actual_start),
+            actual_finish: self.actual_finish.unwrap_or(current.actual_finish),
+            status,
+            notes: self.notes.unwrap_or_else(|| current.notes.clone()),
+            sort_order: Some(self.sort_order.unwrap_or(current.sort_order)),
+            parent_id: self
+                .parent_id
+                .map_or(current.parent_id.map(|p| p.get()), |v| v),
+        })
+    }
 }
 
 impl CallForwardRequest {

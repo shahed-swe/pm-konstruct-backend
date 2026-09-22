@@ -79,6 +79,11 @@ impl ProgressService {
         Ok(self.progress.create(s.principal.scope(), input).await?)
     }
 
+    /// One record, so a partial update has something to merge onto.
+    pub async fn get(&self, s: &SessionUser, id: ProgressId) -> AppResult<Progress> {
+        self.owned(s, id).await
+    }
+
     pub async fn update(
         &self,
         s: &SessionUser,
