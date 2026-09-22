@@ -11,6 +11,7 @@ pub mod forms;
 pub mod job;
 pub mod media;
 pub mod progress;
+pub mod reports;
 pub mod scheduler;
 
 pub use auth::*;
@@ -21,4 +22,5 @@ pub use forms::*;
 pub use job::*;
 pub use media::*;
 pub use progress::*;
+pub use reports::*;
 pub use scheduler::*;

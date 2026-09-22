@@ -19,6 +19,7 @@ pub mod ids;
 pub mod job;
 pub mod media;
 pub mod progress;
+pub mod reports;
 pub mod scheduler;
 pub mod tenant;
 

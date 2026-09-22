@@ -315,6 +315,34 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
     .execute(&mut *tx)
     .await?;
 
+    // Diary entries with weather, so the weather-impact and inspection
+    // reports have something real to classify. Ids are pinned above 200.
+    //
+    // 201 is a heavy-rainfall day, 202 an adverse condition with no
+    // measurement, 203 a fine day whose issues blame the weather, 204 a
+    // plainly fine day, and 205 light rain -- rainy, but not enough to stop
+    // work, which is the case that separates the rainy-day count from the
+    // impact count.
+    sqlx::query(
+        "INSERT INTO site_diary
+           (id, job_id, author_id, date, time, work_completed, weather_condition,
+            temperature, rainfall_mm, wind_speed_kmh, issues, safety_notes, workforce)
+         VALUES
+           (201, 1, 2, CURRENT_DATE - 5, '07:30', 'Rained off',        'Heavy Rain', 14.5, 32.0, 25.0, NULL, 'Toolbox talk held', 4),
+           (202, 1, 2, CURRENT_DATE - 4, '07:30', 'Storm delays',      'Thunderstorm', 18.0, 0.0, 45.0, NULL, NULL, 6),
+           (203, 1, 2, CURRENT_DATE - 3, '07:30', 'Access blocked',    'Sunny', 26.0, 0.0, 10.0, 'Flooding across the access road', NULL, 8),
+           (204, 1, 2, CURRENT_DATE - 2, '07:30', 'Framing continued', 'Sunny', 24.0, 0.0, 12.0, NULL, 'Harness check', 10),
+           (205, 1, 2, CURRENT_DATE - 1, '07:30', 'Slow going',        'Light rain', 19.5, 2.0, 15.0, NULL, NULL, 7)
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "SELECT setval('site_diary_id_seq', GREATEST((SELECT MAX(id) FROM site_diary), 1))",
+    )
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
-    Ok(6)
+    Ok(7)
 }

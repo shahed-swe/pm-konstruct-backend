@@ -12,6 +12,7 @@ pub mod job_task;
 pub mod media;
 pub mod progress;
 pub mod refresh_token;
+pub mod reports;
 pub mod scheduler;
 pub mod user;
 
@@ -27,5 +28,6 @@ pub use job_task::PgJobTaskRepository;
 pub use media::PgMediaRepository;
 pub use progress::PgProgressRepository;
 pub use refresh_token::PgRefreshTokenRepository;
+pub use reports::PgReportsRepository;
 pub use scheduler::PgSchedulerRepository;
 pub use user::PgUserRepository;

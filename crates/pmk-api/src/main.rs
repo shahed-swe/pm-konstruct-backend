@@ -3,6 +3,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use axum::ServiceExt;
 use pmk_api::{build_router, AppState};
 use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
@@ -11,10 +12,12 @@ use pmk_infra::repo::{
     PgBillingRepository, PgCalendarRepository, PgCallForwardRepository, PgDashboardRepository,
     PgDiaryRepository, PgFormsRepository, PgJobLinkRepository, PgJobRepository,
     PgJobTaskRepository, PgMediaRepository, PgProgressRepository, PgRefreshTokenRepository,
-    PgSchedulerRepository, PgUserRepository,
+    PgReportsRepository, PgSchedulerRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
+use tower::Layer;
+use tower_http::normalize_path::NormalizePathLayer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -54,6 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let job_repo5 = job_repo.clone();
     let job_repo6 = job_repo.clone();
     let job_repo7 = job_repo.clone();
+    let job_repo8 = job_repo.clone();
     let jobs = Arc::new(pmk_app::jobs::JobService::new(
         job_repo.clone(),
         Arc::new(PgJobTaskRepository::new(pool.clone())),
@@ -110,6 +114,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         job_repo7,
     ));
 
+    let reports = Arc::new(pmk_app::reports::ReportsService::new(
+        Arc::new(PgReportsRepository::new(pool.clone())),
+        job_repo8,
+        clock.clone(),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -122,6 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         forms,
         dashboard,
         progress,
+        reports,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };
@@ -148,9 +159,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(%addr, "listening");
 
-    axum::serve(listener, build_router(state))
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    // Express treated `/api/jobs` and `/api/jobs/` as the same route; axum
+    // does not, so every collection endpoint would 404 on a trailing slash.
+    // Trimming it here rather than inside `build_router` keeps that function
+    // returning a plain `Router`, which the tests construct directly.
+    let app = NormalizePathLayer::trim_trailing_slash().layer(build_router(state));
+
+    axum::serve(
+        listener,
+        ServiceExt::<axum::extract::Request>::into_make_service(app),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
     Ok(())
 }
 

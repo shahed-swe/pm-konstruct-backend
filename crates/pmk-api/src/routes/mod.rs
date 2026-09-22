@@ -11,4 +11,5 @@ pub mod health;
 pub mod jobs;
 pub mod media;
 pub mod progress;
+pub mod reports;
 pub mod scheduler;

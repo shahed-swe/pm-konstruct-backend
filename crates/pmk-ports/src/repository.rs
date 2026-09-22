@@ -1194,3 +1194,323 @@ pub struct BulkDeletePlan {
     /// Rows that were deleted, with the objects queued for sweeping.
     pub deleted: Vec<MediaSelection>,
 }
+
+// ── reports ─────────────────────────────────────────────────────────────────
+
+use pmk_domain::ids::ReportId;
+use pmk_domain::reports::ReportRange;
+
+/// Narrows a report beyond the caller's own visibility.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ReportFilter {
+    pub job_id: Option<JobId>,
+    /// Jobs this person supervises, whether as primary or by assignment.
+    pub supervisor_id: Option<UserId>,
+    /// Diary author, on the reports that are about entries rather than jobs.
+    pub author_id: Option<UserId>,
+    pub range: ReportRange,
+}
+
+/// A stored, generated report.
+#[derive(Debug, Clone)]
+pub struct StoredReport {
+    pub id: ReportId,
+    pub job_id: JobId,
+    pub report_type: String,
+    pub title: String,
+    /// Free text, not JSON: the column is `text NOT NULL` and the legacy wrote
+    /// whatever the generator produced into it.
+    pub content: String,
+    pub generated_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredReportInput {
+    pub job_id: JobId,
+    pub report_type: String,
+    pub title: String,
+    pub content: String,
+}
+
+/// The filter dropdowns every report shares.
+#[derive(Debug, Clone, Default)]
+pub struct ReportMeta {
+    pub jobs: Vec<ReportMetaJob>,
+    pub supervisors: Vec<CalendarFilterSupervisor>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReportMetaJob {
+    pub id: JobId,
+    pub name: String,
+    pub job_number: String,
+    pub status: String,
+    pub address: Option<String>,
+}
+
+/// One job's line on the progress report, already aggregated.
+#[derive(Debug, Clone)]
+pub struct JobProgressRow {
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub client: Option<String>,
+    pub address: Option<String>,
+    pub status: String,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub end_date: Option<chrono::NaiveDate>,
+    pub supervisor_id: Option<UserId>,
+    pub supervisor_name: Option<String>,
+    pub total_tasks: i64,
+    pub not_started: i64,
+    pub in_progress: i64,
+    pub completed: i64,
+    pub on_hold: i64,
+    pub delayed_count: i64,
+}
+
+/// An overdue call-forward item.
+#[derive(Debug, Clone)]
+pub struct DelayRow {
+    pub task_id: i32,
+    pub title: String,
+    pub item_type: String,
+    pub supplier_trade: Option<String>,
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub job_address: Option<String>,
+    pub supervisor_id: Option<UserId>,
+    pub supervisor_name: Option<String>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub actual_finish: Option<chrono::NaiveDate>,
+    pub delay_days: i64,
+    pub status: String,
+}
+
+/// A diary entry with its notes rolled up by category.
+#[derive(Debug, Clone)]
+pub struct DiaryReportRow {
+    pub id: DiaryEntryId,
+    pub date: chrono::NaiveDate,
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub job_address: Option<String>,
+    pub author_id: Option<UserId>,
+    pub author_name: Option<String>,
+    pub weather: Option<String>,
+    pub workforce: Option<i32>,
+    pub work_completed: String,
+    pub materials: String,
+    pub trades_on_site: String,
+    pub safety_notes: String,
+    pub client_instructions: String,
+    pub issues: String,
+    pub notes: String,
+}
+
+/// A call-forward item that has not started yet.
+#[derive(Debug, Clone)]
+pub struct UpcomingTaskRow {
+    pub task_id: i32,
+    pub title: String,
+    pub item_type: String,
+    pub supplier_trade: Option<String>,
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub job_address: Option<String>,
+    pub supervisor_id: Option<UserId>,
+    pub supervisor_name: Option<String>,
+    pub est_start: Option<chrono::NaiveDate>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub days_until_start: Option<i64>,
+    pub days_until_finish: Option<i64>,
+    pub status: String,
+}
+
+/// A stage claim with the month it is forecast to fall in.
+#[derive(Debug, Clone)]
+pub struct StageClaimRow {
+    pub id: i32,
+    pub title: String,
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub job_address: Option<String>,
+    pub supervisor_name: Option<String>,
+    pub supplier_trade: Option<String>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub actual_finish: Option<chrono::NaiveDate>,
+    pub status: String,
+}
+
+/// A diary entry viewed as an inspection.
+#[derive(Debug, Clone)]
+pub struct InspectionRow {
+    pub id: DiaryEntryId,
+    pub date: chrono::NaiveDate,
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub job_address: Option<String>,
+    pub inspector: Option<String>,
+    pub safety_notes: Option<String>,
+    pub issues: Option<String>,
+    pub workforce: Option<i32>,
+    pub trades_on_site: Option<String>,
+}
+
+/// A diary entry's weather record.
+#[derive(Debug, Clone)]
+pub struct WeatherRow {
+    pub id: DiaryEntryId,
+    pub date: chrono::NaiveDate,
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub author_name: Option<String>,
+    pub location_name: Option<String>,
+    pub weather_condition: Option<String>,
+    pub temperature: Option<f64>,
+    pub rainfall_mm: Option<f64>,
+    pub wind_speed_kmh: Option<f64>,
+    pub issues: Option<String>,
+    pub workforce: Option<i32>,
+}
+
+/// The raw counts behind one supervisor's performance line.
+#[derive(Debug, Clone)]
+pub struct SupervisorCounts {
+    pub supervisor_id: UserId,
+    pub name: String,
+    pub email: String,
+    pub active_jobs: i64,
+    pub completed_jobs: i64,
+    pub total_jobs: i64,
+    pub started_tasks: i64,
+    pub started_on_time: i64,
+    pub finished_tasks: i64,
+    pub finished_on_time: i64,
+    pub total_tasks: i64,
+    pub delayed_tasks: i64,
+    pub total_delay_days: i64,
+    pub diary_entries: i64,
+    /// Job windows, for counting the working days a diary was expected on.
+    pub job_windows: Vec<(chrono::NaiveDate, chrono::NaiveDate)>,
+}
+
+#[async_trait]
+pub trait ReportsRepository: Send + Sync {
+    async fn stored(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        job: Option<JobId>,
+    ) -> PortResult<Vec<StoredReport>>;
+
+    async fn create_stored(
+        &self,
+        scope: TenantScope,
+        input: &StoredReportInput,
+    ) -> PortResult<StoredReport>;
+
+    async fn meta(&self, scope: TenantScope, jobs: &JobScope) -> PortResult<ReportMeta>;
+
+    async fn job_progress(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: ReportFilter,
+        today: chrono::NaiveDate,
+    ) -> PortResult<Vec<JobProgressRow>>;
+
+    async fn delays(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: ReportFilter,
+        today: chrono::NaiveDate,
+    ) -> PortResult<Vec<DelayRow>>;
+
+    async fn diary_summary(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: ReportFilter,
+    ) -> PortResult<Vec<DiaryReportRow>>;
+
+    async fn upcoming_tasks(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: ReportFilter,
+        today: chrono::NaiveDate,
+    ) -> PortResult<Vec<UpcomingTaskRow>>;
+
+    async fn stage_claims(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: ReportFilter,
+    ) -> PortResult<Vec<StageClaimRow>>;
+
+    async fn inspections(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: ReportFilter,
+    ) -> PortResult<Vec<InspectionRow>>;
+
+    async fn weather(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: ReportFilter,
+    ) -> PortResult<Vec<WeatherRow>>;
+
+    /// Everything the daily-progress report needs for one job on one day.
+    async fn daily_progress(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        date: chrono::NaiveDate,
+    ) -> PortResult<Option<DailyProgressData>>;
+
+    async fn supervisor_counts(
+        &self,
+        scope: TenantScope,
+        filter: ReportFilter,
+        today: chrono::NaiveDate,
+    ) -> PortResult<Vec<SupervisorCounts>>;
+}
+
+/// The job, its programme and the day's diary, for the daily report.
+#[derive(Debug, Clone)]
+pub struct DailyProgressData {
+    pub job_id: JobId,
+    pub job_number: String,
+    pub job_name: String,
+    pub client: Option<String>,
+    pub supervisor_id: Option<UserId>,
+    pub supervisor_name: Option<String>,
+    pub tasks: Vec<DailyTaskRow>,
+    pub diary: Option<DiaryReportRow>,
+}
+
+/// One programme item, as the daily report sees it.
+#[derive(Debug, Clone)]
+pub struct DailyTaskRow {
+    pub id: i32,
+    pub title: String,
+    pub item_type: String,
+    pub supplier_trade: Option<String>,
+    pub est_start: Option<chrono::NaiveDate>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub actual_start: Option<chrono::NaiveDate>,
+    pub actual_finish: Option<chrono::NaiveDate>,
+    pub status: String,
+    pub sort_order: i32,
+}
