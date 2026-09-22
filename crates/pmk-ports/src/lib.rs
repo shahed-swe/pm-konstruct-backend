@@ -14,9 +14,13 @@ pub mod events;
 pub mod mail;
 pub mod repository;
 pub mod storage;
+pub mod stripe;
 
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use error::{PortError, PortResult};
 pub use events::{Audience, BroadcastEvent, EventBus, MAX_EVENT_BYTES};
 pub use mail::{EmailSender, Message, SmtpCredentials};
 pub use storage::{ObjectHead, ObjectStore, PresignedUrl};
+pub use stripe::{
+    CheckoutRequest, CheckoutResult, Customer, HostedSession, StripeGateway, Subscription,
+};

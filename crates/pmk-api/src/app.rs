@@ -60,6 +60,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/users", routes::users::router())
         .nest("/settings", routes::settings::router())
         .nest("/weather", routes::weather::router())
+        .nest("/billing", routes::billing::router())
         .nest("/events", routes::events::router())
         // Kept at the top level, as the legacy had it, even though it is a
         // report -- the frontend's URL is part of the contract.

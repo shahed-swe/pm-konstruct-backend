@@ -80,9 +80,15 @@ pub struct PermissionsResponse {
     pub permissions: Vec<PermissionDto>,
 }
 
+/// The entitlement summary carried on `/auth/me`, so the client knows
+/// whether to show the application or redirect to billing.
+///
+/// Not the billing page's own status, which is `dto::billing::BillingStatusDto`
+/// and reads the subscription from Stripe. This one is derived from what the
+/// session already resolved and costs nothing extra.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BillingStatusDto {
+pub struct EntitlementDto {
     pub access_allowed: bool,
     pub onboarding_complete: bool,
     pub can_configure_account: bool,
@@ -94,7 +100,7 @@ pub struct BillingStatusDto {
 pub struct MeResponse {
     pub user: UserDto,
     pub permissions: Vec<PermissionDto>,
-    pub billing: BillingStatusDto,
+    pub billing: EntitlementDto,
 }
 
 impl From<&SessionUser> for MeResponse {
@@ -102,7 +108,7 @@ impl From<&SessionUser> for MeResponse {
         Self {
             user: UserDto::from(&s.user),
             permissions: s.effective().into_iter().map(Into::into).collect(),
-            billing: BillingStatusDto {
+            billing: EntitlementDto {
                 access_allowed: s.entitlement.can_access_application,
                 onboarding_complete: s.entitlement.onboarding_complete,
                 can_configure_account: s.entitlement.can_configure_account,

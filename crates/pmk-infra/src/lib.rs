@@ -10,6 +10,7 @@ pub mod events;
 pub mod mail;
 pub mod repo;
 pub mod storage;
+pub mod stripe;
 pub mod telemetry;
 pub mod weather;
 

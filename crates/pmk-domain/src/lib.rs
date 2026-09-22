@@ -9,6 +9,7 @@
 //! isolation. Time enters through a caller-supplied value, never `now()`.
 
 pub mod access;
+pub mod billing;
 pub mod call_forward;
 pub mod dashboard;
 pub mod diary;

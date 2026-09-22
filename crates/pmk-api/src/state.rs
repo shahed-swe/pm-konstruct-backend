@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use pmk_app::billing::BillingService;
 use pmk_app::call_forward::CallForwardService;
 use pmk_app::dashboard::DashboardService;
 use pmk_app::diary::DiaryService;
@@ -36,6 +37,7 @@ pub struct AppState {
     pub users: Arc<UsersService>,
     pub settings: Arc<SettingsService>,
     pub weather: Arc<WeatherService>,
+    pub billing: Arc<BillingService>,
     pub events: Arc<dyn pmk_ports::EventBus>,
     pub clock: Arc<dyn Clock>,
     pub pool: sqlx::PgPool,

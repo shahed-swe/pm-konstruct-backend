@@ -24,6 +24,7 @@ pub struct Config {
     pub notifications: NotificationsConfig,
     pub smtp: SmtpConfig,
     pub weather: WeatherConfig,
+    pub billing: BillingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +89,22 @@ pub struct TenancyConfig {
     /// dates, scheduler days, report ranges. Never the host's local zone.
     /// See domain-rules.md R1 and the cross-cutting timezone note.
     pub default_timezone: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BillingConfig {
+    /// Stripe secret key. Empty leaves billing unavailable rather than
+    /// broken, which is how production runs today: none has ever been set
+    /// outside Replit's managed integration.
+    pub stripe_secret_key: String,
+    /// Overridden in development to reach `stripe-mock`.
+    pub stripe_base_url: String,
+    /// What this deployment expects Stripe to be. A mismatch means a staging
+    /// environment is pointed at live keys, or production at test ones, and
+    /// the readiness check reports it.
+    pub expect_livemode: bool,
+    /// Where Stripe returns the customer after checkout or the portal.
+    pub app_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +194,12 @@ impl Default for Config {
                 json_logs: false,
                 otlp_endpoint: None,
                 service_name: "pmk-api".into(),
+            },
+            billing: BillingConfig {
+                stripe_secret_key: String::new(),
+                stripe_base_url: pmk_stripe_default_base_url(),
+                expect_livemode: false,
+                app_url: "http://localhost:3000".into(),
             },
             weather: WeatherConfig {
                 openweather_api_key: String::new(),
@@ -288,6 +311,11 @@ impl Config {
     pub fn refresh_ttl(&self) -> Duration {
         Duration::from_secs(self.auth.refresh_token_ttl_secs)
     }
+}
+
+/// Stripe's live API, unless a deployment points elsewhere.
+fn pmk_stripe_default_base_url() -> String {
+    "https://api.stripe.com".to_string()
 }
 
 #[cfg(test)]

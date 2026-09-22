@@ -265,7 +265,8 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
                  CURRENT_DATE - 400, CURRENT_DATE - 300),
                 (4, 2, 'Rival Tower', 'RIV-001', 'Rival Client', '9 Other St', 'active', 6,
                  CURRENT_DATE - 10, CURRENT_DATE + 10)
-         ON CONFLICT (id) DO NOTHING",
+         ON CONFLICT (id) DO UPDATE
+           SET start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date",
     )
     .execute(&mut *tx)
     .await?;
@@ -308,7 +309,10 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
            (108, 1, 'Tiling',             'TASK',        CURRENT_DATE - 40, CURRENT_DATE - 35, NULL, 'on_hold', 8, NULL),
            (109, 2, 'Shopfront glazing',  'TASK',        CURRENT_DATE - 15, CURRENT_DATE - 9,  NULL, 'not_started', 1, NULL),
            (110, 4, 'Rival slab',         'TASK',        CURRENT_DATE - 15, CURRENT_DATE - 9,  NULL, 'not_started', 1, NULL)
-         ON CONFLICT (id) DO NOTHING",
+         ON CONFLICT (id) DO UPDATE
+           SET est_start = EXCLUDED.est_start,
+               est_finish = EXCLUDED.est_finish,
+               actual_finish = EXCLUDED.actual_finish",
     )
     .execute(&mut *tx)
     .await?;
@@ -318,6 +322,11 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
     .execute(&mut *tx)
     .await?;
 
+    // Re-seeding refreshes the relative dates above rather than leaving them
+    // where they were first written. They are offsets from CURRENT_DATE, so a
+    // database seeded last week has every item a week further overdue -- which
+    // silently moves items between severity bands.
+    //
     // Diary entries with weather, so the weather-impact and inspection
     // reports have something real to classify. Ids are pinned above 200.
     //
@@ -336,7 +345,7 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
            (203, 1, 2, CURRENT_DATE - 3, '07:30', 'Access blocked',    'Sunny', 26.0, 0.0, 10.0, 'Flooding across the access road', NULL, 8),
            (204, 1, 2, CURRENT_DATE - 2, '07:30', 'Framing continued', 'Sunny', 24.0, 0.0, 12.0, NULL, 'Harness check', 10),
            (205, 1, 2, CURRENT_DATE - 1, '07:30', 'Slow going',        'Light rain', 19.5, 2.0, 15.0, NULL, NULL, 7)
-         ON CONFLICT (id) DO NOTHING",
+         ON CONFLICT (id) DO UPDATE SET date = EXCLUDED.date",
     )
     .execute(&mut *tx)
     .await?;

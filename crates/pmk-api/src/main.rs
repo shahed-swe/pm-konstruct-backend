@@ -177,6 +177,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         weather_provider.clone(),
     ));
 
+    let stripe: Option<Arc<dyn pmk_ports::StripeGateway>> = pmk_infra::stripe::StripeClient::new(
+        &config.billing.stripe_secret_key,
+        &config.billing.stripe_base_url,
+    )
+    .map(|c| Arc::new(c) as Arc<dyn pmk_ports::StripeGateway>);
+
+    let billing_service = Arc::new(pmk_app::billing::BillingService::new(
+        Arc::new(PgBillingRepository::new(pool.clone())),
+        stripe,
+        pmk_app::billing::ReturnUrls {
+            success: format!("{}/billing?checkout=success", config.billing.app_url),
+            cancel: format!("{}/billing?checkout=cancelled", config.billing.app_url),
+            portal_return: format!("{}/billing", config.billing.app_url),
+        },
+        config.billing.expect_livemode,
+        config.auth.setup_secret.clone(),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -194,6 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         users,
         settings,
         weather,
+        billing: billing_service,
         events,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),

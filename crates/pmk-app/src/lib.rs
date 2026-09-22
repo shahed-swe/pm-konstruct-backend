@@ -6,6 +6,7 @@
 //! HTTP layer calls. Business rules live in `pmk-domain`; I/O lives behind
 //! `pmk-ports`.
 
+pub mod billing;
 pub mod call_forward;
 pub mod dashboard;
 pub mod diary;

@@ -3,6 +3,7 @@
 
 pub mod ai_assistant;
 pub mod auth;
+pub mod billing;
 pub mod call_forward;
 pub mod dashboard;
 pub mod diary;

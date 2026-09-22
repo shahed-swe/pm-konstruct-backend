@@ -4,6 +4,7 @@
 //! golden fixtures match without a translation layer.
 
 pub mod auth;
+pub mod billing;
 pub mod call_forward;
 pub mod dashboard;
 pub mod diary;
@@ -19,6 +20,7 @@ pub mod users;
 pub mod weather;
 
 pub use auth::*;
+pub use billing::*;
 pub use call_forward::*;
 pub use dashboard::*;
 pub use diary::*;

@@ -154,9 +154,44 @@ impl Entitlement {
     }
 }
 
+/// A company's stored billing linkage.
+#[derive(Debug, Clone, Default)]
+pub struct BillingRecord {
+    pub stripe_customer_id: Option<String>,
+    pub stripe_subscription_id: Option<String>,
+    pub plan_key: Option<String>,
+    pub price_id: Option<String>,
+    pub seat_quantity: Option<i64>,
+    pub trial_ends_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub onboarding_complete: bool,
+    pub company_name: String,
+}
+
 #[async_trait]
 pub trait BillingRepository: Send + Sync {
     async fn entitlement(&self, company: CompanyId) -> PortResult<Entitlement>;
+
+    /// The company's stored Stripe linkage.
+    async fn record(&self, company: CompanyId) -> PortResult<Option<BillingRecord>>;
+
+    /// Remembers the Stripe customer created for a company.
+    async fn set_customer(&self, company: CompanyId, customer_id: &str) -> PortResult<()>;
+
+    /// Records what a completed checkout bought.
+    async fn set_subscription(
+        &self,
+        company: CompanyId,
+        subscription_id: &str,
+        plan_key: &str,
+        price_id: &str,
+        seats: i64,
+    ) -> PortResult<()>;
+
+    /// Marks the billing walkthrough finished.
+    async fn complete_onboarding(&self, company: CompanyId) -> PortResult<()>;
+
+    /// Active users, for seat accounting on the billing page.
+    async fn active_user_count(&self, company: CompanyId) -> PortResult<i64>;
 }
 
 // ── jobs ────────────────────────────────────────────────────────────────────
