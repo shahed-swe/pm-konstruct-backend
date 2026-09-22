@@ -7,6 +7,7 @@
 pub mod config;
 pub mod db;
 pub mod repo;
+pub mod storage;
 pub mod telemetry;
 
 pub use config::Config;

@@ -11,6 +11,8 @@
 pub mod clock;
 pub mod error;
 pub mod repository;
+pub mod storage;
 
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use error::{PortError, PortResult};
+pub use storage::{ObjectHead, ObjectStore, PresignedUrl};
