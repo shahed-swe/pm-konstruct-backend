@@ -1,0 +1,21 @@
+[package]
+name = "pmk-worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = false
+
+[lints]
+workspace = true
+
+[dependencies]
+pmk-domain = { path = "../pmk-domain" }
+pmk-ports = { path = "../pmk-ports" }
+pmk-app = { path = "../pmk-app" }
+pmk-infra = { path = "../pmk-infra" }
+tokio.workspace = true
+apalis.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "pmk-ports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = false
+
+[lints]
+workspace = true
+
+[dependencies]
+pmk-domain = { path = "../pmk-domain" }
+async-trait.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+bytes = "1"

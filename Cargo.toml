@@ -1,0 +1,113 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/pmk-domain",
+  "crates/pmk-ports",
+  "crates/pmk-infra",
+  "crates/pmk-app",
+  "crates/pmk-api",
+  "crates/pmk-worker",
+  "crates/pmk-cli",
+]
+
+[workspace.package]
+version    = "0.1.0"
+edition    = "2021"
+rust-version = "1.84"
+license    = "UNLICENSED"
+publish    = false
+
+# Pinned centrally so every crate agrees. Bump deliberately, never per-crate.
+[workspace.dependencies]
+# runtime
+tokio        = { version = "1.43", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
+futures      = "0.3"
+async-trait  = "0.1"
+
+# http
+axum         = { version = "0.8", features = ["macros", "multipart"] }
+tower        = "0.5"
+tower-http   = { version = "0.6", features = ["trace", "compression-gzip", "timeout", "limit", "cors", "request-id", "util"] }
+hyper        = "1.6"
+
+# db
+sqlx         = { version = "0.8", default-features = false, features = [
+                 "runtime-tokio-rustls", "postgres", "macros", "migrate",
+                 "chrono", "rust_decimal", "uuid", "json" ] }
+
+# serialisation / validation
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+validator    = { version = "0.19", features = ["derive"] }
+
+# openapi
+utoipa       = { version = "5", features = ["axum_extras", "chrono", "decimal", "uuid"] }
+utoipa-axum  = "0.1"
+
+# auth
+jsonwebtoken = "9"
+argon2       = "0.5"
+bcrypt       = "0.16"
+
+# errors / logging
+thiserror    = "2"
+anyhow       = "1"
+tracing      = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.28"
+opentelemetry = "0.27"
+opentelemetry-otlp = "0.27"
+
+# config
+figment      = { version = "0.10", features = ["toml", "env"] }
+
+# types
+chrono       = { version = "0.4", features = ["serde"] }
+chrono-tz    = "0.10"
+rust_decimal = { version = "1", features = ["serde-with-float"] }
+uuid         = { version = "1", features = ["v4", "serde"] }
+
+# integrations
+reqwest      = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+aws-sdk-s3   = "1.68"
+aws-config   = { version = "1.5", features = ["behavior-version-latest"] }
+lettre       = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
+async-stripe = { version = "0.40", features = ["runtime-tokio-hyper-rustls"] }
+web-push     = "0.10"
+
+# jobs
+apalis       = { version = "0.6", features = ["limit", "retry"] }
+
+# cli
+clap         = { version = "4", features = ["derive", "env"] }
+
+# test
+insta        = { version = "1", features = ["json", "redactions"] }
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["postgres"] }
+
+[workspace.lints.rust]
+unsafe_code              = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub          = "warn"
+
+[workspace.lints.clippy]
+# Correctness signals that matter most for a rewrite where silent behaviour
+# changes are the main risk.
+unwrap_used   = "deny"
+expect_used   = "warn"
+panic         = "deny"
+todo          = "warn"
+dbg_macro     = "deny"
+float_cmp     = "deny"
+# Money and percentages must not round through f64 -- see domain-rules.md R12.
+cast_possible_truncation = "warn"
+cast_precision_loss      = "warn"
+
+[profile.release]
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3   # sqlx compile-time query checking is slow otherwise
