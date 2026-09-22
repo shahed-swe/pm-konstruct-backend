@@ -178,5 +178,7 @@ pub struct ActionItem {
     pub latest_comment_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+pub mod calendar;
+
 #[cfg(test)]
 mod tests;

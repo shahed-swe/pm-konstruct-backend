@@ -233,11 +233,21 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
     .await?;
 
     sqlx::query(
-        "INSERT INTO jobs (id, company_id, name, job_number, client, address, status, supervisor_id)
-         VALUES (1, 1, 'Riverside Apartments Stage 2', 'BSC-2024-001', 'Riverside Developments', '1 River Rd', 'active', 2),
-                (2, 1, 'Westfield Retail Fitout', 'BSC-2024-002', 'Westfield Corp', '2 Mall Way', 'active', 3),
-                (3, 1, 'City Council Resurfacing', 'BSC-2024-003', 'Townsville Council', '3 Civic Pl', 'completed', 2),
-                (4, 2, 'Rival Tower', 'RIV-001', 'Rival Client', '9 Other St', 'active', 6)
+        // Dates are relative to CURRENT_DATE so the calendar always has
+        // something in the current month. Job 2 is deliberately open-ended
+        // (no end_date): the calendar must treat that as running forever
+        // rather than dropping it, and job 3 is deliberately in the past.
+        "INSERT INTO jobs
+           (id, company_id, name, job_number, client, address, status, supervisor_id,
+            start_date, end_date)
+         VALUES (1, 1, 'Riverside Apartments Stage 2', 'BSC-2024-001', 'Riverside Developments', '1 River Rd', 'active', 2,
+                 CURRENT_DATE - 60, CURRENT_DATE + 60),
+                (2, 1, 'Westfield Retail Fitout', 'BSC-2024-002', 'Westfield Corp', '2 Mall Way', 'active', 3,
+                 CURRENT_DATE - 30, NULL),
+                (3, 1, 'City Council Resurfacing', 'BSC-2024-003', 'Townsville Council', '3 Civic Pl', 'completed', 2,
+                 CURRENT_DATE - 400, CURRENT_DATE - 300),
+                (4, 2, 'Rival Tower', 'RIV-001', 'Rival Client', '9 Other St', 'active', 6,
+                 CURRENT_DATE - 10, CURRENT_DATE + 10)
          ON CONFLICT (id) DO NOTHING",
     )
     .execute(&mut *tx)

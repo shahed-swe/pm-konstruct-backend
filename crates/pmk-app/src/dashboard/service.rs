@@ -1,9 +1,14 @@
 use std::sync::Arc;
 
+use pmk_domain::dashboard::calendar::{
+    effective_range, CalendarEvent, CalendarFilterOptions, EventKind, MonthWindow,
+};
 use pmk_domain::dashboard::{delay_severity, ActionItem, DashboardStats, DelaySeverity, JobScope};
+use pmk_domain::ids::{JobId, UserId};
+use pmk_domain::DomainError;
 use pmk_ports::repository::{
-    DashboardCallForward, DashboardDiaryEntry, DashboardJob, DashboardRepository, JobListFilter,
-    JobRepository, UpcomingClaim,
+    CalendarFilter, CalendarItemRow, CalendarRepository, DashboardCallForward, DashboardDiaryEntry,
+    DashboardJob, DashboardRepository, JobListFilter, JobRepository, UpcomingClaim,
 };
 use pmk_ports::Clock;
 
@@ -17,8 +22,22 @@ const RECENT_DIARY_DAYS: i64 = 7;
 /// week. Far enough to plan around, not so far that the list is noise.
 const CLAIM_HORIZON_EXTRA_DAYS: i64 = 7;
 
+/// What the calendar was asked for.
+#[derive(Debug, Clone, Default)]
+pub struct CalendarQuery {
+    /// `YYYY-MM`. Absent means the month the company is currently in.
+    pub month: Option<String>,
+    /// The gantt view, which ignores `month` and spans everything.
+    pub all_dates: bool,
+    pub job_id: Option<i32>,
+    pub supervisor_id: Option<i32>,
+    /// `job`, `claim`, `task` or `all`.
+    pub kind: Option<String>,
+}
+
 pub struct DashboardService {
     dashboard: Arc<dyn DashboardRepository>,
+    calendar: Arc<dyn CalendarRepository>,
     jobs: Arc<dyn JobRepository>,
     clock: Arc<dyn Clock>,
 }
@@ -33,11 +52,13 @@ impl DashboardService {
     #[must_use]
     pub fn new(
         dashboard: Arc<dyn DashboardRepository>,
+        calendar: Arc<dyn CalendarRepository>,
         jobs: Arc<dyn JobRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             dashboard,
+            calendar,
             jobs,
             clock,
         }
@@ -152,6 +173,132 @@ impl DashboardService {
             .upcoming_claims(s.principal.scope(), &scope, cutoff)
             .await?)
     }
+
+    // ── calendar ────────────────────────────────────────────────────────────
+
+    pub async fn calendar(
+        &self,
+        s: &SessionUser,
+        q: &CalendarQuery,
+    ) -> AppResult<Vec<CalendarEvent>> {
+        let scope = self.scope(s).await?;
+        let kind = EventKind::parse_filter(q.kind.as_deref()).map_err(AppError::Domain)?;
+
+        let window = if q.all_dates {
+            MonthWindow::all_time()
+        } else {
+            match q.month.as_deref() {
+                Some(m) => MonthWindow::parse(m).map_err(AppError::Domain)?,
+                None => MonthWindow::containing(self.clock.today()),
+            }
+        };
+
+        let filter = CalendarFilter {
+            job_id: q.job_id.map(JobId),
+            supervisor_id: q.supervisor_id.map(UserId),
+        };
+
+        // Asking for one job outside your scope is a 403, not an empty list:
+        // the caller named a specific job, so silence would read as "that job
+        // has nothing on" rather than "that job is not yours".
+        if let (Some(job), JobScope::Only(visible)) = (filter.job_id, &scope) {
+            if !visible.contains(&job) {
+                return Err(AppError::Domain(DomainError::Forbidden(
+                    "that job is not yours to see",
+                )));
+            }
+        }
+
+        let mut events = Vec::new();
+
+        if EventKind::Job.included_by(kind) {
+            for j in self
+                .calendar
+                .jobs_in_window(s.principal.scope(), &scope, window, filter)
+                .await?
+            {
+                let name = j.name.clone().unwrap_or_default();
+                events.push(CalendarEvent {
+                    id: format!("job-{}", j.id.get()),
+                    kind: EventKind::Job,
+                    title: name.clone(),
+                    // A job with no dates still occupies the window it was
+                    // asked about, rather than vanishing from the calendar.
+                    start: j.start_date.unwrap_or(window.first),
+                    end: j.end_date.unwrap_or(window.last),
+                    est_start: Some(j.start_date.unwrap_or(window.first)),
+                    est_finish: j.end_date,
+                    // A job has no actuals -- only its call-forward items do.
+                    actual_start: None,
+                    actual_finish: None,
+                    job_id: j.id,
+                    job_name: name,
+                    job_number: j.job_number.unwrap_or_default(),
+                    job_address: j.address,
+                    supervisor_id: j.supervisor_id,
+                    supervisor_name: j.supervisor_name,
+                    status: j.status,
+                    supplier_trade: None,
+                    url: format!("/jobs/{}", j.id.get()),
+                });
+            }
+        }
+
+        for (k, prefix) in [(EventKind::Claim, "claim"), (EventKind::Task, "task")] {
+            if !k.included_by(kind) {
+                continue;
+            }
+            let rows = self
+                .calendar
+                .items_in_window(s.principal.scope(), &scope, window, k, filter)
+                .await?;
+            events.extend(rows.into_iter().filter_map(|r| item_event(r, k, prefix)));
+        }
+
+        Ok(events)
+    }
+
+    pub async fn calendar_filters(&self, s: &SessionUser) -> AppResult<CalendarFilterOptions> {
+        let scope = self.scope(s).await?;
+        Ok(CalendarFilterOptions {
+            jobs: self
+                .calendar
+                .filter_jobs(s.principal.scope(), &scope)
+                .await?,
+            supervisors: self
+                .calendar
+                .filter_supervisors(s.principal.scope(), &scope)
+                .await?,
+        })
+    }
+}
+
+/// Turns a call-forward row into a calendar bar, or drops it.
+///
+/// An item with none of its four dates set has nowhere to be drawn, so it is
+/// omitted rather than placed arbitrarily.
+fn item_event(r: CalendarItemRow, kind: EventKind, prefix: &str) -> Option<CalendarEvent> {
+    let (start, end) = effective_range(r.actual_start, r.est_start, r.actual_finish, r.est_finish)?;
+    Some(CalendarEvent {
+        id: format!("{prefix}-{}", r.id),
+        kind,
+        title: r.title,
+        start,
+        end,
+        est_start: r.est_start,
+        est_finish: r.est_finish,
+        actual_start: r.actual_start,
+        actual_finish: r.actual_finish,
+        job_id: r.job_id,
+        job_name: r.job_name.unwrap_or_default(),
+        job_number: r.job_number.unwrap_or_default(),
+        job_address: r.job_address,
+        supervisor_id: r.supervisor_id,
+        supervisor_name: r.supervisor_name,
+        status: r.status,
+        supplier_trade: r.supplier_trade,
+        url: format!("/jobs/{}/call-forward?itemId={}", r.job_id.get(), r.id),
+    })
 }
 
 /// End of next month, plus a week.

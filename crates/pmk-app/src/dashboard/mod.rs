@@ -1,4 +1,4 @@
 //! Dashboard use cases.
 
 mod service;
-pub use service::DashboardService;
+pub use service::{CalendarQuery, DashboardService};

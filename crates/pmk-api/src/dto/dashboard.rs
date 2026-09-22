@@ -216,3 +216,133 @@ impl From<ActionItem> for ActionItemDto {
         }
     }
 }
+
+// ── calendar ────────────────────────────────────────────────────────────────
+
+use pmk_domain::dashboard::calendar::{CalendarEvent, CalendarFilterOptions};
+use serde::Deserialize;
+
+/// The calendar's query string.
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarQueryParams {
+    pub month: Option<String>,
+    /// The legacy parameter is `gantt`; it means "ignore the month".
+    #[serde(default)]
+    pub gantt: Option<String>,
+    pub job_id: Option<i32>,
+    pub supervisor_id: Option<i32>,
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+}
+
+impl From<CalendarQueryParams> for pmk_app::dashboard::CalendarQuery {
+    fn from(q: CalendarQueryParams) -> Self {
+        Self {
+            month: q.month,
+            // Any of the usual truthy spellings, because the legacy frontend
+            // sends `gantt=true` and `gantt=1` from different screens.
+            all_dates: matches!(q.gantt.as_deref(), Some("true" | "1" | "yes")),
+            job_id: q.job_id,
+            supervisor_id: q.supervisor_id,
+            kind: q.kind,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEventDto {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    pub title: String,
+    pub start: chrono::NaiveDate,
+    pub end: chrono::NaiveDate,
+    pub est_start: Option<chrono::NaiveDate>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub actual_start: Option<chrono::NaiveDate>,
+    pub actual_finish: Option<chrono::NaiveDate>,
+    pub job_id: i32,
+    pub job_name: String,
+    pub job_number: String,
+    pub job_address: Option<String>,
+    pub supervisor_id: Option<i32>,
+    pub supervisor_name: Option<String>,
+    pub status: String,
+    pub supplier_trade: Option<String>,
+    pub url: String,
+}
+
+impl From<CalendarEvent> for CalendarEventDto {
+    fn from(e: CalendarEvent) -> Self {
+        Self {
+            id: e.id,
+            kind: e.kind.as_str(),
+            title: e.title,
+            start: e.start,
+            end: e.end,
+            est_start: e.est_start,
+            est_finish: e.est_finish,
+            actual_start: e.actual_start,
+            actual_finish: e.actual_finish,
+            job_id: e.job_id.get(),
+            job_name: e.job_name,
+            job_number: e.job_number,
+            job_address: e.job_address,
+            supervisor_id: e.supervisor_id.map(|u| u.get()),
+            supervisor_name: e.supervisor_name,
+            status: e.status,
+            supplier_trade: e.supplier_trade,
+            url: e.url,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarFilterJobDto {
+    pub id: i32,
+    pub name: String,
+    pub job_number: String,
+    pub address: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarFilterSupervisorDto {
+    pub id: i32,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarFiltersDto {
+    pub jobs: Vec<CalendarFilterJobDto>,
+    pub supervisors: Vec<CalendarFilterSupervisorDto>,
+}
+
+impl From<CalendarFilterOptions> for CalendarFiltersDto {
+    fn from(o: CalendarFilterOptions) -> Self {
+        Self {
+            jobs: o
+                .jobs
+                .into_iter()
+                .map(|j| CalendarFilterJobDto {
+                    id: j.id.get(),
+                    name: j.name,
+                    job_number: j.job_number,
+                    address: j.address,
+                })
+                .collect(),
+            supervisors: o
+                .supervisors
+                .into_iter()
+                .map(|s| CalendarFilterSupervisorDto {
+                    id: s.id.get(),
+                    name: s.name,
+                })
+                .collect(),
+        }
+    }
+}

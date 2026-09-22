@@ -8,9 +8,10 @@ use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
-    PgBillingRepository, PgCallForwardRepository, PgDashboardRepository, PgDiaryRepository,
-    PgFormsRepository, PgJobLinkRepository, PgJobRepository, PgJobTaskRepository,
-    PgMediaRepository, PgRefreshTokenRepository, PgSchedulerRepository, PgUserRepository,
+    PgBillingRepository, PgCalendarRepository, PgCallForwardRepository, PgDashboardRepository,
+    PgDiaryRepository, PgFormsRepository, PgJobLinkRepository, PgJobRepository,
+    PgJobTaskRepository, PgMediaRepository, PgRefreshTokenRepository, PgSchedulerRepository,
+    PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -98,6 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let dashboard = Arc::new(pmk_app::dashboard::DashboardService::new(
         Arc::new(PgDashboardRepository::new(pool.clone())),
+        Arc::new(PgCalendarRepository::new(pool.clone())),
         job_repo6,
         clock.clone(),
     ));

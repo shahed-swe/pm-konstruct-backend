@@ -10,13 +10,14 @@
 //! `site-diary:read`. A user who cannot open the call-forward page cannot read
 //! its numbers off the dashboard either.
 
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
 use pmk_ports::repository::JobListFilter;
 
 use crate::dto::{
-    ActionItemDto, DashboardCallForwardDto, DashboardDiaryDto, DashboardJobDto, DashboardStatsDto,
+    ActionItemDto, CalendarEventDto, CalendarFiltersDto, CalendarQueryParams,
+    DashboardCallForwardDto, DashboardDiaryDto, DashboardJobDto, DashboardStatsDto,
     DelaySeverityDto, UpcomingClaimDto,
 };
 use crate::error::ApiError;
@@ -35,6 +36,10 @@ pub fn router() -> Router<AppState> {
         .route("/overdue-list", get(overdue_list))
         .route("/recent-diary-list", get(recent_diary_list))
         .route("/delay-severity", get(delay_severity))
+        // `/calendar/filters` is registered separately from `/calendar`; axum
+        // matches the literal segment, so there is no ambiguity.
+        .route("/calendar", get(calendar))
+        .route("/calendar/filters", get(calendar_filters))
 }
 
 /// The headline counters.
@@ -128,4 +133,27 @@ async fn delay_severity(
 ) -> Result<Json<Vec<DelaySeverityDto>>, ApiError> {
     let buckets = state.dashboard.delay_severity(&session).await?;
     Ok(Json(buckets.into_iter().map(Into::into).collect()))
+}
+
+/// The month view, and the all-dates gantt view behind `gantt=true`.
+///
+/// Jobs, stage claims and tasks are drawn on one calendar, so their ids are
+/// prefixed -- `jobs` and `call_forward` share a numeric id space and a bare
+/// `7` would be ambiguous.
+async fn calendar(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<CallForwardRead>,
+    Query(q): Query<CalendarQueryParams>,
+) -> Result<Json<Vec<CalendarEventDto>>, ApiError> {
+    let events = state.dashboard.calendar(&session, &q.into()).await?;
+    Ok(Json(events.into_iter().map(Into::into).collect()))
+}
+
+async fn calendar_filters(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<CallForwardRead>,
+) -> Result<Json<CalendarFiltersDto>, ApiError> {
+    Ok(Json(
+        state.dashboard.calendar_filters(&session).await?.into(),
+    ))
 }

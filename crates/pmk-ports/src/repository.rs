@@ -1013,3 +1013,90 @@ pub trait DashboardRepository: Send + Sync {
         jobs: &JobScope,
     ) -> PortResult<Vec<ActionItem>>;
 }
+
+// ── calendar ────────────────────────────────────────────────────────────────
+
+use pmk_domain::dashboard::calendar::{
+    CalendarFilterJob, CalendarFilterSupervisor, EventKind, MonthWindow,
+};
+
+/// A job that overlaps the calendar window.
+#[derive(Debug, Clone)]
+pub struct CalendarJobRow {
+    pub id: JobId,
+    pub name: Option<String>,
+    pub job_number: Option<String>,
+    pub address: Option<String>,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub end_date: Option<chrono::NaiveDate>,
+    pub status: String,
+    pub supervisor_id: Option<UserId>,
+    pub supervisor_name: Option<String>,
+}
+
+/// A call-forward item that overlaps the calendar window.
+#[derive(Debug, Clone)]
+pub struct CalendarItemRow {
+    pub id: i32,
+    pub title: String,
+    pub est_start: Option<chrono::NaiveDate>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub actual_start: Option<chrono::NaiveDate>,
+    pub actual_finish: Option<chrono::NaiveDate>,
+    pub status: String,
+    pub supplier_trade: Option<String>,
+    pub job_id: JobId,
+    pub job_name: Option<String>,
+    pub job_number: Option<String>,
+    pub job_address: Option<String>,
+    pub supervisor_id: Option<UserId>,
+    pub supervisor_name: Option<String>,
+}
+
+/// Narrows a calendar query beyond the caller's own visibility.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CalendarFilter {
+    /// One job only. Rejected with 403 if it is outside the caller's scope.
+    pub job_id: Option<JobId>,
+    /// Jobs whose primary supervisor is this user.
+    pub supervisor_id: Option<UserId>,
+}
+
+#[async_trait]
+pub trait CalendarRepository: Send + Sync {
+    async fn jobs_in_window(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        window: MonthWindow,
+        filter: CalendarFilter,
+    ) -> PortResult<Vec<CalendarJobRow>>;
+
+    /// Call-forward items of one kind overlapping the window.
+    ///
+    /// Overlap is measured on the *effective* dates -- coalesced across all
+    /// four columns -- so an item carrying only an estimated start is still
+    /// found.
+    async fn items_in_window(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        window: MonthWindow,
+        kind: EventKind,
+        filter: CalendarFilter,
+    ) -> PortResult<Vec<CalendarItemRow>>;
+
+    async fn filter_jobs(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+    ) -> PortResult<Vec<CalendarFilterJob>>;
+
+    /// Supervisors reachable from the caller's jobs: primary supervisors
+    /// union assignees, deduplicated, ordered by name.
+    async fn filter_supervisors(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+    ) -> PortResult<Vec<CalendarFilterSupervisor>>;
+}
