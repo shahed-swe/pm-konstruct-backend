@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use pmk_app::call_forward::CallForwardService;
+use pmk_app::dashboard::DashboardService;
 use pmk_app::diary::DiaryService;
 use pmk_app::forms::FormsService;
 use pmk_app::identity::AuthService;
@@ -22,6 +23,7 @@ pub struct AppState {
     pub media: Arc<MediaService>,
     pub scheduler: Arc<SchedulerService>,
     pub forms: Arc<FormsService>,
+    pub dashboard: Arc<DashboardService>,
     pub clock: Arc<dyn Clock>,
     pub pool: sqlx::PgPool,
     /// Flipped once migrations are confirmed applied. `/readyz` reports it, and

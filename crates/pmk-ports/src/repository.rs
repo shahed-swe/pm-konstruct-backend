@@ -879,3 +879,137 @@ pub struct RenderedInspection {
     /// `None` clears the action flag -- an untouched draft is not an action.
     pub action_status: Option<&'static str>,
 }
+
+// ── dashboard ───────────────────────────────────────────────────────────────
+
+use pmk_domain::dashboard::{ActionItem, DashboardStats, JobScope};
+
+/// A job as the dashboard drill-down lists it.
+#[derive(Debug, Clone)]
+pub struct DashboardJob {
+    pub id: JobId,
+    pub job_number: Option<String>,
+    pub address: Option<String>,
+    pub name: Option<String>,
+    pub status: String,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub end_date: Option<chrono::NaiveDate>,
+}
+
+/// A call-forward item as the dashboard drill-down lists it.
+#[derive(Debug, Clone)]
+pub struct DashboardCallForward {
+    pub id: i32,
+    pub job_id: JobId,
+    pub job_number: Option<String>,
+    pub job_address: Option<String>,
+    pub title: String,
+    pub item_type: String,
+    pub est_start: Option<chrono::NaiveDate>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub status: String,
+}
+
+/// A diary entry as the dashboard drill-down lists it.
+#[derive(Debug, Clone)]
+pub struct DashboardDiaryEntry {
+    pub id: DiaryEntryId,
+    pub job_id: JobId,
+    pub job_number: Option<String>,
+    pub job_address: Option<String>,
+    pub date: chrono::NaiveDate,
+    pub work_completed: Option<String>,
+    pub author_name: Option<String>,
+}
+
+/// A stage claim falling due.
+#[derive(Debug, Clone)]
+pub struct UpcomingClaim {
+    pub id: i32,
+    pub job_id: JobId,
+    pub job_name: Option<String>,
+    pub job_address: Option<String>,
+    pub job_number: Option<String>,
+    pub title: String,
+    pub est_start: Option<chrono::NaiveDate>,
+    pub est_finish: Option<chrono::NaiveDate>,
+    pub actual_start: Option<chrono::NaiveDate>,
+    pub actual_finish: Option<chrono::NaiveDate>,
+    pub status: String,
+    pub notes: Option<String>,
+}
+
+/// Which jobs a drill-down list covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobListFilter {
+    /// Every job in scope, whatever its status.
+    All,
+    Active,
+    Completed,
+}
+
+#[async_trait]
+pub trait DashboardRepository: Send + Sync {
+    async fn stats(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        diary_since: chrono::NaiveDate,
+        include_user_count: bool,
+    ) -> PortResult<DashboardStats>;
+
+    async fn jobs_list(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        filter: JobListFilter,
+    ) -> PortResult<Vec<DashboardJob>>;
+
+    /// Open items: `not_started` or `in_progress`, headers excluded.
+    async fn open_call_forwards(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+    ) -> PortResult<Vec<DashboardCallForward>>;
+
+    /// Past their estimated finish, not finished, not on hold.
+    async fn overdue_call_forwards(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        today: chrono::NaiveDate,
+    ) -> PortResult<Vec<DashboardCallForward>>;
+
+    /// How many days late each overdue item is, for bucketing.
+    async fn overdue_days(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        today: chrono::NaiveDate,
+    ) -> PortResult<Vec<i64>>;
+
+    async fn recent_diary(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        since: chrono::NaiveDate,
+    ) -> PortResult<Vec<DashboardDiaryEntry>>;
+
+    /// Stage claims due on or before `cutoff`, still open.
+    ///
+    /// Deliberately unbounded below: an overdue claim stays visible until it
+    /// is marked complete, rather than dropping off the dashboard.
+    async fn upcoming_claims(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+        cutoff: chrono::NaiveDate,
+    ) -> PortResult<Vec<UpcomingClaim>>;
+
+    /// Unarchived notes carrying an action status, newest entry first.
+    async fn action_items(
+        &self,
+        scope: TenantScope,
+        jobs: &JobScope,
+    ) -> PortResult<Vec<ActionItem>>;
+}

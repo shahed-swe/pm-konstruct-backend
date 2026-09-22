@@ -5,6 +5,7 @@
 
 pub mod auth;
 pub mod call_forward;
+pub mod dashboard;
 pub mod diary;
 pub mod forms;
 pub mod job;
@@ -13,6 +14,7 @@ pub mod scheduler;
 
 pub use auth::*;
 pub use call_forward::*;
+pub use dashboard::*;
 pub use diary::*;
 pub use forms::*;
 pub use job::*;

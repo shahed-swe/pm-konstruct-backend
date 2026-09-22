@@ -4,6 +4,7 @@
 pub mod ai_assistant;
 pub mod auth;
 pub mod call_forward;
+pub mod dashboard;
 pub mod diary;
 pub mod forms;
 pub mod health;

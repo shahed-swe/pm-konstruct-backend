@@ -2,6 +2,7 @@
 
 pub mod billing;
 pub mod call_forward;
+pub mod dashboard;
 pub mod diary;
 pub mod forms;
 pub mod job;
@@ -14,6 +15,7 @@ pub mod user;
 
 pub use billing::PgBillingRepository;
 pub use call_forward::PgCallForwardRepository;
+pub use dashboard::PgDashboardRepository;
 pub use diary::PgDiaryRepository;
 pub use forms::PgFormsRepository;
 pub use job::PgJobRepository;
