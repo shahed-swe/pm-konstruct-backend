@@ -7,6 +7,7 @@ use pmk_app::diary::DiaryService;
 use pmk_app::identity::AuthService;
 use pmk_app::jobs::JobService;
 use pmk_app::media::MediaService;
+use pmk_app::scheduler::SchedulerService;
 use pmk_infra::Config;
 use pmk_ports::Clock;
 
@@ -18,6 +19,7 @@ pub struct AppState {
     pub diary: Arc<DiaryService>,
     pub call_forward: Arc<CallForwardService>,
     pub media: Arc<MediaService>,
+    pub scheduler: Arc<SchedulerService>,
     pub clock: Arc<dyn Clock>,
     pub pool: sqlx::PgPool,
     /// Flipped once migrations are confirmed applied. `/readyz` reports it, and

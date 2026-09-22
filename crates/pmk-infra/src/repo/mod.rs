@@ -8,6 +8,7 @@ pub mod job_link;
 pub mod job_task;
 pub mod media;
 pub mod refresh_token;
+pub mod scheduler;
 pub mod user;
 
 pub use billing::PgBillingRepository;
@@ -18,4 +19,5 @@ pub use job_link::PgJobLinkRepository;
 pub use job_task::PgJobTaskRepository;
 pub use media::PgMediaRepository;
 pub use refresh_token::PgRefreshTokenRepository;
+pub use scheduler::PgSchedulerRepository;
 pub use user::PgUserRepository;

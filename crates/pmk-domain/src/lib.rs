@@ -16,6 +16,7 @@ pub mod identity;
 pub mod ids;
 pub mod job;
 pub mod media;
+pub mod scheduler;
 pub mod tenant;
 
 pub use error::{DomainError, DomainResult};

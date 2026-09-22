@@ -270,6 +270,12 @@ fn constraint_message(constraint: &str) -> String {
             "That worker is already allocated on this date".into()
         }
         "uq_scheduler_worker_absence_period" => "An identical absence period already exists".into(),
+        // Raised by the overlap trigger via RAISE, not by a named constraint,
+        // so the repository supplies this name itself -- otherwise the client
+        // would only ever see the bare "Conflict" fallback.
+        "scheduler_worker_absence_overlap" => {
+            "That worker already has an absence overlapping these dates".into()
+        }
         "scheduler_allocation_target_check" => {
             "An allocation must target either a job or a maintenance job".into()
         }
@@ -385,6 +391,29 @@ mod tests {
         assert_eq!(e.status, StatusCode::BAD_REQUEST);
         assert_eq!(e.body.error, "Invalid value");
         assert!(!e.body.error.contains("some_internal_check_7"));
+    }
+
+    #[test]
+    fn the_absence_overlap_trigger_gets_a_real_message() {
+        let e: ApiError = PortError::Conflict {
+            constraint: Some("scheduler_worker_absence_overlap".into()),
+        }
+        .into();
+        assert_eq!(e.status, StatusCode::CONFLICT);
+        assert!(e.body.error.contains("overlapping"), "{}", e.body.error);
+    }
+
+    #[test]
+    fn double_booking_a_worker_explains_itself() {
+        let e: ApiError = PortError::Conflict {
+            constraint: Some("uq_scheduler_company_worker_date".into()),
+        }
+        .into();
+        assert!(
+            e.body.error.contains("already allocated"),
+            "{}",
+            e.body.error
+        );
     }
 
     #[test]

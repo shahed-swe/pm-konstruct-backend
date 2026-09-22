@@ -549,3 +549,143 @@ pub trait MediaRepository: Send + Sync {
 
     async fn mark_deletion_failed(&self, stored_name: &str, error: &str) -> PortResult<()>;
 }
+
+// ── trade scheduler ─────────────────────────────────────────────────────────
+
+use pmk_domain::ids::{SchedulerAbsenceId, SchedulerAllocationId, SchedulerWorkerId};
+use pmk_domain::scheduler::{
+    Absence, AbsenceInput, Allocation, AllocationInput, Worker, WorkerInput,
+};
+
+/// A maintenance job: scheduler-only work that is not a real construction job.
+#[derive(Debug, Clone)]
+pub struct MaintenanceJob {
+    pub id: i32,
+    pub name: String,
+    pub reference: Option<String>,
+    pub address: Option<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MaintenanceJobInput {
+    pub name: String,
+    pub reference: Option<String>,
+    pub address: Option<String>,
+    pub status: Option<String>,
+}
+
+/// A free-text note pinned to one job on one day.
+#[derive(Debug, Clone)]
+pub struct DayNote {
+    pub id: i32,
+    pub job_id: JobId,
+    pub note_date: chrono::NaiveDate,
+    pub note: String,
+}
+
+/// The window the board renders.
+#[derive(Debug, Clone, Copy)]
+pub struct DateRange {
+    pub from: chrono::NaiveDate,
+    pub to: chrono::NaiveDate,
+}
+
+/// Everything one board render needs, fetched together.
+///
+/// The legacy implementation issued a query per worker per day. This returns
+/// the whole window at once so a 20-worker month is a handful of round-trips
+/// rather than hundreds.
+#[derive(Debug, Clone, Default)]
+pub struct BoardData {
+    pub workers: Vec<Worker>,
+    pub absences: Vec<Absence>,
+    pub allocations: Vec<Allocation>,
+    pub day_notes: Vec<DayNote>,
+}
+
+#[async_trait]
+pub trait SchedulerRepository: Send + Sync {
+    // -- workers -------------------------------------------------------------
+    async fn workers(&self, scope: TenantScope, include_inactive: bool) -> PortResult<Vec<Worker>>;
+    async fn create_worker(&self, scope: TenantScope, input: &WorkerInput) -> PortResult<Worker>;
+    async fn update_worker(
+        &self,
+        scope: TenantScope,
+        id: SchedulerWorkerId,
+        input: &WorkerInput,
+    ) -> PortResult<Option<Worker>>;
+    /// Soft delete: `active = false`. Allocation history is preserved.
+    async fn deactivate_worker(
+        &self,
+        scope: TenantScope,
+        id: SchedulerWorkerId,
+    ) -> PortResult<bool>;
+    /// Hard delete, cascading to allocations and absences.
+    async fn purge_worker(&self, scope: TenantScope, id: SchedulerWorkerId) -> PortResult<bool>;
+
+    // -- absences ------------------------------------------------------------
+    async fn absences(&self, scope: TenantScope, range: DateRange) -> PortResult<Vec<Absence>>;
+    async fn create_absence(&self, scope: TenantScope, input: &AbsenceInput)
+        -> PortResult<Absence>;
+    async fn update_absence(
+        &self,
+        scope: TenantScope,
+        id: SchedulerAbsenceId,
+        input: &AbsenceInput,
+    ) -> PortResult<Option<Absence>>;
+    async fn delete_absence(&self, scope: TenantScope, id: SchedulerAbsenceId) -> PortResult<bool>;
+
+    // -- allocations ---------------------------------------------------------
+    async fn allocations(
+        &self,
+        scope: TenantScope,
+        range: DateRange,
+    ) -> PortResult<Vec<Allocation>>;
+    async fn create_allocation(
+        &self,
+        scope: TenantScope,
+        input: &AllocationInput,
+    ) -> PortResult<Allocation>;
+    async fn update_allocation(
+        &self,
+        scope: TenantScope,
+        id: SchedulerAllocationId,
+        input: &AllocationInput,
+    ) -> PortResult<Option<Allocation>>;
+    async fn delete_allocation(
+        &self,
+        scope: TenantScope,
+        id: SchedulerAllocationId,
+    ) -> PortResult<bool>;
+
+    // -- maintenance jobs ----------------------------------------------------
+    async fn maintenance_jobs(&self, scope: TenantScope) -> PortResult<Vec<MaintenanceJob>>;
+    async fn create_maintenance_job(
+        &self,
+        scope: TenantScope,
+        input: &MaintenanceJobInput,
+    ) -> PortResult<MaintenanceJob>;
+    async fn update_maintenance_job(
+        &self,
+        scope: TenantScope,
+        id: i32,
+        input: &MaintenanceJobInput,
+    ) -> PortResult<Option<MaintenanceJob>>;
+    async fn delete_maintenance_job(&self, scope: TenantScope, id: i32) -> PortResult<bool>;
+
+    // -- day notes -----------------------------------------------------------
+    async fn day_notes(&self, scope: TenantScope, range: DateRange) -> PortResult<Vec<DayNote>>;
+    /// Upserts: one note per job per day (`uq_scheduler_job_day_note`).
+    async fn set_day_note(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        date: chrono::NaiveDate,
+        note: &str,
+    ) -> PortResult<DayNote>;
+    async fn delete_day_note(&self, scope: TenantScope, id: i32) -> PortResult<bool>;
+
+    /// One round-trip per collection, for a whole board window.
+    async fn board(&self, scope: TenantScope, range: DateRange) -> PortResult<BoardData>;
+}

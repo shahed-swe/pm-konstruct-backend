@@ -12,5 +12,6 @@ pub mod error;
 pub mod identity;
 pub mod jobs;
 pub mod media;
+pub mod scheduler;
 
 pub use error::{AppError, AppResult};

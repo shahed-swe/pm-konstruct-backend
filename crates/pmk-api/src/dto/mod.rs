@@ -8,9 +8,11 @@ pub mod call_forward;
 pub mod diary;
 pub mod job;
 pub mod media;
+pub mod scheduler;
 
 pub use auth::*;
 pub use call_forward::*;
 pub use diary::*;
 pub use job::*;
 pub use media::*;
+pub use scheduler::*;

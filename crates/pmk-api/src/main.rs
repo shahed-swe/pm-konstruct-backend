@@ -10,7 +10,7 @@ use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
     PgBillingRepository, PgCallForwardRepository, PgDiaryRepository, PgJobLinkRepository,
     PgJobRepository, PgJobTaskRepository, PgMediaRepository, PgRefreshTokenRepository,
-    PgUserRepository,
+    PgSchedulerRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -49,6 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let job_repo = Arc::new(PgJobRepository::new(pool.clone()));
     let job_repo2 = job_repo.clone();
     let job_repo3 = job_repo.clone();
+    let job_repo4 = job_repo.clone();
     let jobs = Arc::new(pmk_app::jobs::JobService::new(
         job_repo.clone(),
         Arc::new(PgJobTaskRepository::new(pool.clone())),
@@ -80,6 +81,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         diary_repo,
     ));
 
+    let scheduler = Arc::new(pmk_app::scheduler::SchedulerService::new(
+        Arc::new(PgSchedulerRepository::new(pool.clone())),
+        job_repo4,
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -88,6 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         diary,
         call_forward,
         media,
+        scheduler,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };

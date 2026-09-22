@@ -8,3 +8,4 @@ pub mod diary;
 pub mod health;
 pub mod jobs;
 pub mod media;
+pub mod scheduler;
