@@ -12,8 +12,8 @@ use axum::{Json, Router};
 use pmk_domain::ids::{JobId, UserId};
 
 use crate::dto::{
-    AddAssignmentRequest, AssignmentDto, JobDto, JobLinkDto, JobLinkRequest, JobListQuery,
-    JobTaskDto, JobTaskRequest, JobUpsertRequest, TaskNotesRequest,
+    AddAssignmentRequest, AssignmentDto, DeleteJobQuery, JobDto, JobLinkDto, JobLinkRequest,
+    JobListQuery, JobTaskDto, JobTaskRequest, JobUpsertRequest, TaskNotesRequest,
 };
 use crate::error::ApiError;
 use crate::extract::{JobsRead, JobsWrite, ManagerOnly, RequirePermission, RequireRole};
@@ -87,13 +87,23 @@ async fn update(
     ))
 }
 
-/// Manager-only, matching the legacy `router.delete("/:id", requireManager, …)`.
+/// Archives a job, or purges it with `?purge=true`.
+///
+/// Manager-only either way, matching the legacy
+/// `router.delete("/:id", requireManager, …)`. The default is now an archive:
+/// a cascade from one job can take years of site diary with it, and that
+/// should not be one mis-click away (docs/adr/0002-scope-decisions.md).
 async fn remove(
     State(state): State<AppState>,
     RequireRole(session): ManagerOnly,
     Path(id): Path<i32>,
+    Query(q): Query<DeleteJobQuery>,
 ) -> Result<StatusCode, ApiError> {
-    state.jobs.delete(&session, JobId(id)).await?;
+    if q.purge {
+        state.jobs.purge(&session, JobId(id)).await?;
+    } else {
+        state.jobs.archive(&session, JobId(id)).await?;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -244,3 +244,14 @@ impl From<JobLinkRequest> for pmk_domain::job::JobLinkInput {
         }
     }
 }
+
+/// `DELETE /jobs/{id}?purge=true` deletes for real instead of archiving.
+///
+/// Opt-in rather than the default because the cascade reaches diary entries,
+/// media, call-forward items and scheduler allocations.
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteJobQuery {
+    #[serde(default)]
+    pub purge: bool,
+}

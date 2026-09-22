@@ -76,9 +76,28 @@ impl JobService {
             .ok_or_else(|| AppError::Domain(DomainError::not_found("Job")))
     }
 
-    pub async fn delete(&self, s: &SessionUser, id: JobId) -> AppResult<()> {
+    /// Archives a job: it stops appearing in the list but nothing is lost.
+    ///
+    /// This is what `DELETE /jobs/{id}` does. Purging is a separate, explicit
+    /// action -- see docs/adr/0002-scope-decisions.md.
+    pub async fn archive(&self, s: &SessionUser, id: JobId) -> AppResult<()> {
         self.get(s, id).await?;
-        if self.jobs.delete(s.principal.scope(), id).await? {
+        if self.jobs.archive(s.principal.scope(), id).await? {
+            Ok(())
+        } else {
+            // Already archived. Idempotent rather than an error: a second
+            // delete of the same job should not fail.
+            Ok(())
+        }
+    }
+
+    /// Permanently deletes a job and everything hanging off it.
+    ///
+    /// Cascades to diary entries, notes, comments, media, call-forward items,
+    /// tasks, links and scheduler allocations. Manager-only at the route.
+    pub async fn purge(&self, s: &SessionUser, id: JobId) -> AppResult<()> {
+        self.get(s, id).await?;
+        if self.jobs.purge(s.principal.scope(), id).await? {
             Ok(())
         } else {
             Err(AppError::Domain(DomainError::not_found("Job")))

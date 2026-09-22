@@ -219,6 +219,8 @@ impl JobRepository for PgJobRepository {
             "SELECT {JOB_COLUMNS} FROM jobs j \
              WHERE {visibility} \
                AND ($2::text IS NULL OR j.status = $2) \
+               -- Archived jobs are hidden unless asked for by name.
+               AND ($2::text IS NOT NULL OR j.status <> 'archived') \
                AND ($3::int IS NULL OR j.supervisor_id = $3) \
                AND ($4::text IS NULL OR j.name ILIKE '%' || $4 || '%' \
                     OR j.job_number ILIKE '%' || $4 || '%' \
@@ -337,11 +339,27 @@ impl JobRepository for PgJobRepository {
         row.map(JobRow::into_domain).transpose()
     }
 
-    async fn delete(&self, scope: TenantScope, id: JobId) -> PortResult<bool> {
+    async fn archive(&self, scope: TenantScope, id: JobId) -> PortResult<bool> {
         let mut tx = self.begin(scope).await?;
-        // ON DELETE CASCADE reaches diary, media, call-forward and scheduler
-        // rows. Whether this should be a soft archive instead is Q3 in
-        // docs/contract/domain-rules.md, pending the client's answer.
+        // The default for DELETE /jobs/{id}. Nothing is lost; the job simply
+        // stops appearing in the list.
+        let r = sqlx::query(
+            "UPDATE jobs SET status = 'archived', updated_at = NOW() \
+             WHERE id = $1 AND status <> 'archived'",
+        )
+        .bind(id.get())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(r.rows_affected() > 0)
+    }
+
+    async fn purge(&self, scope: TenantScope, id: JobId) -> PortResult<bool> {
+        let mut tx = self.begin(scope).await?;
+        // ON DELETE CASCADE reaches diary entries, notes, comments, media,
+        // call-forward items, tasks, links and scheduler allocations. One job
+        // can anchor years of site diary, which is why this is not the default.
         let r = sqlx::query("DELETE FROM jobs WHERE id = $1")
             .bind(id.get())
             .execute(&mut *tx)

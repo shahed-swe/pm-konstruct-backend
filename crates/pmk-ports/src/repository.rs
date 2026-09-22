@@ -141,7 +141,13 @@ pub trait JobRepository: Send + Sync {
         input: &JobInput,
     ) -> PortResult<Option<Job>>;
 
-    async fn delete(&self, scope: TenantScope, id: JobId) -> PortResult<bool>;
+    /// Archives the job. Rows are kept; it drops out of the default list.
+    async fn archive(&self, scope: TenantScope, id: JobId) -> PortResult<bool>;
+
+    /// Deletes for real, cascading to diary, media, call-forward, tasks, links
+    /// and scheduler allocations. Manager-only, behind an explicit flag -- see
+    /// docs/adr/0002-scope-decisions.md.
+    async fn purge(&self, scope: TenantScope, id: JobId) -> PortResult<bool>;
 
     async fn assignments(&self, scope: TenantScope, id: JobId) -> PortResult<Vec<JobAssignment>>;
 
