@@ -12,6 +12,7 @@ pub mod access;
 pub mod call_forward;
 pub mod diary;
 pub mod error;
+pub mod forms;
 pub mod identity;
 pub mod ids;
 pub mod job;

@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use pmk_domain::ids::{DiaryEntryId, JobId, MediaId};
 use pmk_domain::media::{
-    signature_matches, validate_batch_size, validate_upload, UploadRequest, ValidatedUpload,
-    MAX_FILES_PER_UPLOAD, SIGNATURE_PROBE_BYTES,
+    validate_batch_size, validate_upload, UploadRequest, ValidatedUpload, MAX_FILES_PER_UPLOAD,
 };
 use pmk_domain::DomainError;
 use pmk_ports::repository::{
@@ -90,7 +89,7 @@ impl MediaService {
             MediaOwner::Diary { entry, .. } => ("diary", entry.get()),
             MediaOwner::Job { job } => ("job", job.get()),
         };
-        pmk_infra_object_key(s.principal.company_id().get(), entity, id, stored_name)
+        pmk_domain::media::object_key(s.principal.company_id().get(), entity, id, stored_name)
     }
 
     /// Step one: validate the declared type and size, then hand back a
@@ -151,63 +150,24 @@ impl MediaService {
             MediaOwner::Job { job } => self.assert_job_access(s, job).await?,
         }
 
-        let kind = pmk_domain::media::kind_for(mime_type).ok_or_else(|| {
-            AppError::Domain(DomainError::invalid("mimeType", "is not an accepted type"))
-        })?;
-
         let key = self.key_for(s, owner, stored_name);
-
-        let head = self.store.head(&key).await?.ok_or_else(|| {
-            AppError::Domain(DomainError::invalid("storedName", "was not uploaded"))
-        })?;
-
-        if head.size_bytes == 0 {
-            self.discard(&key).await;
-            return Err(AppError::Domain(DomainError::invalid(
-                "size",
-                "the file is empty",
-            )));
-        }
-        if head.size_bytes > kind.max_bytes() {
-            self.discard(&key).await;
-            return Err(AppError::Domain(DomainError::invalid(
-                "size",
-                "Each photo must be 20 MB or smaller, or each video must be 500 MB or smaller.",
-            )));
-        }
-
-        let prefix = self.store.read_prefix(&key, SIGNATURE_PROBE_BYTES).await?;
-        if !signature_matches(kind.mime, &prefix) {
-            // Remove it: an object whose content does not match its declared
-            // type must not linger in the bucket.
-            self.discard(&key).await;
-            return Err(AppError::Domain(DomainError::invalid(
-                "file",
-                format!("File content does not match the declared type for: {original_name}"),
-            )));
-        }
+        let verified =
+            crate::media::upload::verify(self.store.as_ref(), &key, mime_type, original_name)
+                .await?;
 
         let record = MediaRecord {
             owner,
-            file_type: kind.file_type,
-            mime_type: kind.mime.to_string(),
+            file_type: verified.kind.file_type,
+            mime_type: verified.kind.mime.to_string(),
             original_name: original_name.to_string(),
             stored_name: stored_name.to_string(),
-            file_size: i64::try_from(head.size_bytes).unwrap_or(i64::MAX),
+            file_size: verified.size_bytes,
             // The row stores the key, not a signed URL: signed URLs expire,
             // and a stored one would be useless within the hour.
             url: key.clone(),
             uploaded_by: s.user.id,
         };
         Ok(self.media.record(s.principal.scope(), &record).await?)
-    }
-
-    /// Best-effort cleanup of a rejected upload. A failure here is logged, not
-    /// propagated: the caller's error is the one that matters.
-    async fn discard(&self, key: &str) {
-        if let Err(e) = self.store.delete(key).await {
-            tracing::warn!(key, error = %e, "could not remove a rejected upload");
-        }
     }
 
     pub async fn list_for_diary(
@@ -276,9 +236,4 @@ impl MediaService {
             Err(AppError::Domain(DomainError::not_found("Media")))
         }
     }
-}
-
-/// Re-exported so the service does not depend on `pmk-infra` directly.
-fn pmk_infra_object_key(company_id: i32, entity: &str, entity_id: i32, stored: &str) -> String {
-    format!("{company_id}/{entity}/{entity_id}/{stored}")
 }

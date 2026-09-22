@@ -51,6 +51,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/media", routes::media::router())
         .nest("/ai-assistant", routes::ai_assistant::router())
         .nest("/scheduler", routes::scheduler::router())
+        .nest("/forms", routes::forms::router())
         // Nested under their parent so the parent id is in scope; media is
         // always reached through the entry or job that owns it.
         .nest("/site-diary/{id}/media", routes::media::diary_router())

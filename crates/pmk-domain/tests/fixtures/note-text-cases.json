@@ -1,0 +1,28 @@
+[
+  {"name":"empty draft","kind":"inspection","date":"2026-03-04","input":{"items":[]},"photos":{}},
+  {"name":"blank rows only","kind":"inspection","date":"2026-03-04","input":{"items":[{"clientKey":"a","room":"","description":"","actioned":false},{"clientKey":"b","room":"  ","description":"  ","actioned":false}]},"photos":{}},
+  {"name":"mixed filled and blank","kind":"inspection","date":"2026-03-04","input":{"items":[{"clientKey":"a","room":"Kitchen","description":"chip","actioned":true},{"clientKey":"b","room":"","description":"","actioned":false},{"clientKey":"c","room":"Bath","description":"grout","actioned":false}]},"photos":{}},
+  {"name":"photo counts","kind":"inspection","date":"2026-03-04","input":{"items":[{"clientKey":"a","room":"Kitchen","description":"chip","actioned":false}]},"photos":{"a":2}},
+  {"name":"photo only row","kind":"inspection","date":"2026-03-04","input":{"items":[{"clientKey":"a","room":"","description":"","actioned":false}]},"photos":{"a":1}},
+  {"name":"em dash for blank cell","kind":"inspection","date":"2026-03-04","input":{"items":[{"clientKey":"a","room":"","description":"chip","actioned":false}]},"photos":{}},
+  {"name":"all details set","kind":"inspection","date":"2026-12-31","input":{"inspector":"Sarah","inspectionType":"Handover","stage":"Level 2","observations":"  slab looked wet  ","items":[{"clientKey":"a","room":"Kitchen","description":"chip","actioned":true}]},"photos":{}},
+  {"name":"some details set","kind":"inspection","date":"2026-01-01","input":{"inspector":"Sarah","stage":"Level 2","items":[]},"photos":{}},
+  {"name":"observations only","kind":"inspection","date":"2026-01-01","input":{"observations":"nothing else","items":[]},"photos":{}},
+  {"name":"unicode and trimming","kind":"inspection","date":"2026-06-15","input":{"inspector":"  Ali  ","observations":"漏水 in bathroom","items":[{"clientKey":"a","room":" Ensuite ","description":" 漏水 ","actioned":false}]},"photos":{"a":11}},
+
+  {"name":"eto basic","kind":"eto","po":"J-100-01","user":"Sarah","job":{"job_number":"J-100","name":"Smith Residence","address":"12 Rose St"},"reason":"client changed the spec","details":"add two power points"},
+  {"name":"eto blank job parts","kind":"eto","po":"42-03","user":"Sarah","job":{"job_number":"","name":"Smith Residence","address":""},"reason":"r","details":"d"},
+  {"name":"eto multiline","kind":"eto","po":"J-1-07","user":"Ali","job":{"job_number":"J-1","name":"N","address":"A"},"reason":"line one\nline two","details":"do:\n- a\n- b"},
+
+  {"name":"po first","kind":"po","jobNumber":"J-100","jobId":7,"n":1},
+  {"name":"po nine","kind":"po","jobNumber":"J-100","jobId":7,"n":9},
+  {"name":"po ten","kind":"po","jobNumber":"J-100","jobId":7,"n":10},
+  {"name":"po hundred","kind":"po","jobNumber":"J-100","jobId":7,"n":100},
+  {"name":"po blank job number","kind":"po","jobNumber":"","jobId":42,"n":3},
+  {"name":"po padded job number","kind":"po","jobNumber":"  J-1  ","jobId":9,"n":1},
+
+  {"name":"summary none","kind":"summary","inspectionType":"","stage":""},
+  {"name":"summary type only","kind":"summary","inspectionType":"Handover","stage":""},
+  {"name":"summary both","kind":"summary","inspectionType":"Handover","stage":"Level 2"},
+  {"name":"summary trimmed","kind":"summary","inspectionType":"  ","stage":" Level 2 "}
+]

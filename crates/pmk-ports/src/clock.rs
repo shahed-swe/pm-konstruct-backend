@@ -22,6 +22,21 @@ pub trait Clock: Send + Sync + std::fmt::Debug {
     fn today(&self) -> NaiveDate {
         self.now_utc().with_timezone(&self.timezone()).date_naive()
     }
+
+    /// The wall-clock time in [`Clock::timezone`], as `HH:MM`.
+    ///
+    /// Diary entries store the date and the time in two columns. The legacy
+    /// code took the date from `toISOString()` (UTC) and the time from
+    /// `toLocaleTimeString()` (the server's locale), which only ever agreed
+    /// because Replit runs in UTC -- an entry raised at 09:00 Melbourne time
+    /// would otherwise be dated the previous day. Both now come from the same
+    /// zone, so they cannot disagree.
+    fn time_hm(&self) -> String {
+        self.now_utc()
+            .with_timezone(&self.timezone())
+            .format("%H:%M")
+            .to_string()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

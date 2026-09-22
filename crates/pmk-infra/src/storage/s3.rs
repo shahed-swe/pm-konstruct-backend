@@ -197,16 +197,7 @@ impl ObjectStore for S3ObjectStore {
     }
 }
 
-/// Builds the object key for a stored file.
-///
-/// Tenant-prefixed so a bucket policy can enforce isolation as a third layer,
-/// after `TenantScope` and RLS. The stored name is already a UUID, so the
-/// prefix is for operability -- listing one company's objects, or deleting them
-/// on offboarding -- rather than for secrecy.
-#[must_use]
-pub fn object_key(company_id: i32, entity: &str, entity_id: i32, stored_name: &str) -> String {
-    format!("{company_id}/{entity}/{entity_id}/{stored_name}")
-}
+pub use pmk_domain::media::object_key;
 
 #[cfg(test)]
 mod tests {

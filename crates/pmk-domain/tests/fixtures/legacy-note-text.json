@@ -1,0 +1,94 @@
+[
+  {
+    "name": "empty draft",
+    "text": "📋 SITE INSPECTION\n📅 2026-03-04\n\nINSPECTION ITEMS (0 total, 0 actioned):\nDraft started — no inspection items entered yet."
+  },
+  {
+    "name": "blank rows only",
+    "text": "📋 SITE INSPECTION\n📅 2026-03-04\n\nINSPECTION ITEMS (0 total, 0 actioned):\nDraft started — no inspection items entered yet."
+  },
+  {
+    "name": "mixed filled and blank",
+    "text": "📋 SITE INSPECTION\n📅 2026-03-04\n\nINSPECTION ITEMS (2 total, 1 actioned):\n#1 | Kitchen | chip | ✅ Actioned\n#2 | Bath | grout | ⬜ Pending"
+  },
+  {
+    "name": "photo counts",
+    "text": "📋 SITE INSPECTION\n📅 2026-03-04\n\nINSPECTION ITEMS (1 total, 0 actioned):\n#1 | Kitchen | chip [2 photo(s)] | ⬜ Pending"
+  },
+  {
+    "name": "photo only row",
+    "text": "📋 SITE INSPECTION\n📅 2026-03-04\n\nINSPECTION ITEMS (1 total, 0 actioned):\n#1 | — | — [1 photo(s)] | ⬜ Pending"
+  },
+  {
+    "name": "em dash for blank cell",
+    "text": "📋 SITE INSPECTION\n📅 2026-03-04\n\nINSPECTION ITEMS (1 total, 0 actioned):\n#1 | — | chip | ⬜ Pending"
+  },
+  {
+    "name": "all details set",
+    "text": "📋 SITE INSPECTION\n📅 2026-12-31\n👤 Inspector: Sarah  |  🏷 Type: Handover  |  📍 Stage/Area: Level 2\n\nINSPECTION ITEMS (1 total, 1 actioned):\n#1 | Kitchen | chip | ✅ Actioned\n\n📝 OBSERVATIONS:\nslab looked wet"
+  },
+  {
+    "name": "some details set",
+    "text": "📋 SITE INSPECTION\n📅 2026-01-01\n👤 Inspector: Sarah  |  📍 Stage/Area: Level 2\n\nINSPECTION ITEMS (0 total, 0 actioned):\nDraft started — no inspection items entered yet."
+  },
+  {
+    "name": "observations only",
+    "text": "📋 SITE INSPECTION\n📅 2026-01-01\n\nINSPECTION ITEMS (0 total, 0 actioned):\nDraft started — no inspection items entered yet.\n\n📝 OBSERVATIONS:\nnothing else"
+  },
+  {
+    "name": "unicode and trimming",
+    "text": "📋 SITE INSPECTION\n📅 2026-06-15\n👤 Inspector: Ali\n\nINSPECTION ITEMS (1 total, 0 actioned):\n#1 | Ensuite | 漏水 [11 photo(s)] | ⬜ Pending\n\n📝 OBSERVATIONS:\n漏水 in bathroom"
+  },
+  {
+    "name": "eto basic",
+    "text": "ETO J-100-01 — EXTRA TO ORDER\nPURCHASE ORDER: J-100-01\nRaised by: Sarah\nJob: J-100 — Smith Residence — 12 Rose St\n\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nclient changed the spec\n\nWHAT IS REQUIRED\nadd two power points\n\nManager approval required before sharing."
+  },
+  {
+    "name": "eto blank job parts",
+    "text": "ETO 42-03 — EXTRA TO ORDER\nPURCHASE ORDER: 42-03\nRaised by: Sarah\nJob: Smith Residence\n\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nr\n\nWHAT IS REQUIRED\nd\n\nManager approval required before sharing."
+  },
+  {
+    "name": "eto multiline",
+    "text": "ETO J-1-07 — EXTRA TO ORDER\nPURCHASE ORDER: J-1-07\nRaised by: Ali\nJob: J-1 — N — A\n\nINTERNAL REASON — DO NOT EMAIL OR SHARE\nline one\nline two\n\nWHAT IS REQUIRED\ndo:\n- a\n- b\n\nManager approval required before sharing."
+  },
+  {
+    "name": "po first",
+    "text": "J-100-01"
+  },
+  {
+    "name": "po nine",
+    "text": "J-100-09"
+  },
+  {
+    "name": "po ten",
+    "text": "J-100-10"
+  },
+  {
+    "name": "po hundred",
+    "text": "J-100-100"
+  },
+  {
+    "name": "po blank job number",
+    "text": "42-03"
+  },
+  {
+    "name": "po padded job number",
+    "text": "J-1-01"
+  },
+  {
+    "name": "summary none",
+    "text": "Site Inspection"
+  },
+  {
+    "name": "summary type only",
+    "text": "Site Inspection — Handover"
+  },
+  {
+    "name": "summary both",
+    "text": "Site Inspection — Handover — Level 2"
+  },
+  {
+    "name": "summary trimmed",
+    "text": "Site Inspection — Level 2"
+  }
+]

@@ -335,6 +335,21 @@ fn uuid_v4() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// Builds the storage key for a stored file.
+///
+/// Tenant-prefixed so a bucket policy can enforce isolation as a third layer,
+/// after `TenantScope` and RLS. The stored name is already a UUID, so the
+/// prefix is for operability -- listing one company's objects, or deleting
+/// them on offboarding -- rather than for secrecy.
+///
+/// It lives in the domain because both the storage adapter and the use cases
+/// need it, and two copies of a key-naming rule would drift apart without
+/// anything failing until objects went missing.
+#[must_use]
+pub fn object_key(company_id: i32, entity: &str, entity_id: i32, stored_name: &str) -> String {
+    format!("{company_id}/{entity}/{entity_id}/{stored_name}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

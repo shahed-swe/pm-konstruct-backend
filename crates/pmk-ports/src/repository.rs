@@ -689,3 +689,193 @@ pub trait SchedulerRepository: Send + Sync {
     /// One round-trip per collection, for a whole board window.
     async fn board(&self, scope: TenantScope, range: DateRange) -> PortResult<BoardData>;
 }
+
+// ── forms ───────────────────────────────────────────────────────────────────
+
+use pmk_domain::forms::{EtoInput, InspectionDraftInput};
+use pmk_domain::ids::{InspectionFormId, InspectionFormItemId};
+
+/// What raising an ETO produced.
+#[derive(Debug, Clone)]
+pub struct EtoRaised {
+    pub entry_id: DiaryEntryId,
+    pub note_id: DiaryNoteId,
+    pub eto_number: i32,
+    pub po_number: String,
+    pub raised_by: String,
+}
+
+/// One approved ETO, as the job's ETO list shows it.
+#[derive(Debug, Clone)]
+pub struct EtoListItem {
+    pub note_id: DiaryNoteId,
+    pub entry_id: DiaryEntryId,
+    /// Parsed back out of the note text -- it was never stored as a column.
+    pub eto_number: String,
+    pub content: String,
+    pub raised_by: String,
+    pub diary_date: chrono::NaiveDate,
+    pub approved_at: chrono::DateTime<chrono::Utc>,
+    pub job_number: Option<String>,
+    pub job_name: Option<String>,
+    pub job_address: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InspectionPhoto {
+    pub id: i32,
+    pub item_id: InspectionFormItemId,
+    pub diary_media_id: MediaId,
+    pub sort_order: i32,
+    pub original_name: String,
+    pub mime_type: String,
+    pub file_size: i64,
+    pub url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct InspectionItem {
+    pub id: InspectionFormItemId,
+    pub client_key: String,
+    pub room: String,
+    pub description: String,
+    pub actioned: bool,
+    pub sort_order: i32,
+    pub photos: Vec<InspectionPhoto>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InspectionForm {
+    pub id: InspectionFormId,
+    pub company_id: i32,
+    pub job_id: JobId,
+    pub created_by: UserId,
+    pub diary_entry_id: DiaryEntryId,
+    pub diary_note_id: DiaryNoteId,
+    pub inspection_date: chrono::NaiveDate,
+    pub inspector: String,
+    pub inspection_type: String,
+    pub stage: String,
+    pub observations: String,
+    pub weather_data: Option<serde_json::Value>,
+    /// Bumped by every write. The client echoes it back, and a mismatch is a
+    /// 409 rather than a silent overwrite of someone else's edit.
+    pub revision: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub items: Vec<InspectionItem>,
+}
+
+/// A photo about to be attached to an inspection item.
+#[derive(Debug, Clone)]
+pub struct InspectionPhotoRecord {
+    pub media: MediaRecord,
+    pub client_key: String,
+}
+
+#[async_trait]
+pub trait FormsRepository: Send + Sync {
+    /// Raises an ETO: allocates the next per-job number, writes the diary
+    /// entry and its `eto` note, all in one transaction.
+    ///
+    /// The whole thing is one call because the number allocation (R7) and the
+    /// note that carries it must commit together -- a diary entry naming a
+    /// number the sequence never issued, or a burnt number with no note, are
+    /// both worse than failing.
+    ///
+    /// `stamp` is the diary entry's date and `HH:MM` time, both in the
+    /// company's timezone. It comes from the caller's `Clock` rather than
+    /// `now()` here so one zone decides every date boundary.
+    async fn raise_eto(
+        &self,
+        scope: TenantScope,
+        author: UserId,
+        author_name: &str,
+        input: &EtoInput,
+        stamp: (chrono::NaiveDate, &str),
+    ) -> PortResult<EtoRaised>;
+
+    /// Approved, unarchived ETOs on a job, newest first.
+    async fn etos_for_job(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<EtoListItem>>;
+
+    /// The caller's draft for a job, creating one if they have none.
+    ///
+    /// One draft per (company, job, user) by
+    /// `inspection_forms_user_job_unique`: two supervisors inspect the same
+    /// job independently, but one person opening the form twice must land on
+    /// the same draft rather than forking it.
+    ///
+    /// `stamp` carries the new entry's date and `HH:MM` time; `empty_note` is
+    /// the rendered note body for a draft with nothing in it yet.
+    async fn get_or_create_draft(
+        &self,
+        scope: TenantScope,
+        job: JobId,
+        user: UserId,
+        stamp: (chrono::NaiveDate, &str),
+        empty_note: &str,
+    ) -> PortResult<InspectionForm>;
+
+    /// Reads a draft the caller owns.
+    async fn find_draft(
+        &self,
+        scope: TenantScope,
+        id: InspectionFormId,
+        user: UserId,
+    ) -> PortResult<Option<InspectionForm>>;
+
+    /// Saves a draft wholesale, reconciling its items.
+    ///
+    /// `Ok(None)` means the revision did not match: someone else saved first.
+    /// The rendered note text is passed in rather than built here so the
+    /// renderer stays in the domain.
+    async fn save_draft(
+        &self,
+        scope: TenantScope,
+        id: InspectionFormId,
+        user: UserId,
+        input: &InspectionDraftInput,
+        rendered: &RenderedInspection,
+    ) -> PortResult<Option<InspectionForm>>;
+
+    /// Attaches uploaded photos to one item, bumping the revision.
+    ///
+    /// `Ok(None)` on a revision mismatch.
+    async fn attach_photos(
+        &self,
+        scope: TenantScope,
+        id: InspectionFormId,
+        user: UserId,
+        expected_revision: i32,
+        photos: &[InspectionPhotoRecord],
+    ) -> PortResult<Option<InspectionForm>>;
+
+    /// Detaches a photo and queues its object for deletion.
+    ///
+    /// `Ok(None)` on a revision mismatch; `NotFound` if the photo is not on
+    /// this form.
+    async fn delete_photo(
+        &self,
+        scope: TenantScope,
+        id: InspectionFormId,
+        user: UserId,
+        expected_revision: i32,
+        photo_id: i32,
+    ) -> PortResult<Option<InspectionForm>>;
+
+    /// Photo counts per `client_key`, for rendering the note text.
+    async fn photo_counts(
+        &self,
+        scope: TenantScope,
+        id: InspectionFormId,
+    ) -> PortResult<std::collections::HashMap<String, usize>>;
+}
+
+/// The strings a draft save writes into the diary, rendered by the domain.
+#[derive(Debug, Clone)]
+pub struct RenderedInspection {
+    pub note_content: String,
+    pub entry_summary: String,
+    /// `None` clears the action flag -- an untouched draft is not an action.
+    pub action_status: Option<&'static str>,
+}

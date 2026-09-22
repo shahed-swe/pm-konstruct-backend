@@ -8,9 +8,9 @@ use pmk_app::identity::{token::TokenCodec, AuthService};
 use pmk_infra::config::Config;
 use pmk_infra::db::{connect, PoolConfig};
 use pmk_infra::repo::{
-    PgBillingRepository, PgCallForwardRepository, PgDiaryRepository, PgJobLinkRepository,
-    PgJobRepository, PgJobTaskRepository, PgMediaRepository, PgRefreshTokenRepository,
-    PgSchedulerRepository, PgUserRepository,
+    PgBillingRepository, PgCallForwardRepository, PgDiaryRepository, PgFormsRepository,
+    PgJobLinkRepository, PgJobRepository, PgJobTaskRepository, PgMediaRepository,
+    PgRefreshTokenRepository, PgSchedulerRepository, PgUserRepository,
 };
 use pmk_infra::telemetry;
 use pmk_ports::SystemClock;
@@ -50,6 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let job_repo2 = job_repo.clone();
     let job_repo3 = job_repo.clone();
     let job_repo4 = job_repo.clone();
+    let job_repo5 = job_repo.clone();
     let jobs = Arc::new(pmk_app::jobs::JobService::new(
         job_repo.clone(),
         Arc::new(PgJobTaskRepository::new(pool.clone())),
@@ -74,6 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let diary_repo = Arc::new(PgDiaryRepository::new(pool.clone()));
     let store: Arc<dyn pmk_ports::ObjectStore> =
         Arc::new(pmk_infra::storage::S3ObjectStore::new(&config.storage));
+    let store2 = store.clone();
     let media = Arc::new(pmk_app::media::MediaService::new(
         Arc::new(PgMediaRepository::new(pool.clone())),
         store,
@@ -86,6 +88,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         job_repo4,
     ));
 
+    let forms = Arc::new(pmk_app::forms::FormsService::new(
+        Arc::new(PgFormsRepository::new(pool.clone())),
+        job_repo5,
+        store2,
+        clock.clone(),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -95,6 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         call_forward,
         media,
         scheduler,
+        forms,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),
     };

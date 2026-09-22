@@ -20,6 +20,8 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list).post(create))
+        // Ahead of `/{id}` so "job" is never parsed as an entry id.
+        .route("/job/{job_id}/etos", get(job_etos))
         .route("/{id}", get(get_one).put(update).delete(remove))
         .route("/{id}/action-status", patch(set_action_status))
         .route("/{id}/notes", get(notes).post(add_note))
@@ -231,4 +233,21 @@ async fn add_comment(
         )
         .await?;
     Ok((StatusCode::CREATED, Json(c.into())))
+}
+
+/// Approved ETOs raised against a job.
+///
+/// Lives under `/site-diary` rather than `/forms` because an ETO *is* a diary
+/// note -- the form only created it. The number is parsed back out of the note
+/// text, which is the only place it was ever stored.
+async fn job_etos(
+    State(state): State<AppState>,
+    RequirePermission(session, ..): RequirePermission<SiteDiaryRead>,
+    Path(job_id): Path<i32>,
+) -> Result<Json<Vec<crate::dto::EtoListItemDto>>, ApiError> {
+    let etos = state
+        .forms
+        .etos_for_job(&session, pmk_domain::ids::JobId(job_id))
+        .await?;
+    Ok(Json(etos.into_iter().map(Into::into).collect()))
 }
