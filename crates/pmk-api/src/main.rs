@@ -131,6 +131,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.notifications.vapid_public_key.clone(),
     ));
 
+    let users = Arc::new(pmk_app::users::UsersService::new(
+        Arc::new(PgUserRepository::new(pool.clone())),
+        Arc::new(PgBillingRepository::new(pool.clone())),
+        clock.clone(),
+    ));
+
     let state = AppState {
         clock,
         config: Arc::new(config.clone()),
@@ -145,6 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         progress,
         reports,
         notifications,
+        users,
         events,
         pool: pool.clone(),
         ready: Arc::new(AtomicBool::new(false)),

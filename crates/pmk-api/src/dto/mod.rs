@@ -14,6 +14,7 @@ pub mod notifications;
 pub mod progress;
 pub mod reports;
 pub mod scheduler;
+pub mod users;
 
 pub use auth::*;
 pub use call_forward::*;
@@ -26,3 +27,4 @@ pub use notifications::*;
 pub use progress::*;
 pub use reports::*;
 pub use scheduler::*;
+pub use users::*;

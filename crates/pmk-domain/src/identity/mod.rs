@@ -61,6 +61,34 @@ impl HashKind {
     }
 }
 
+/// Deliberately minimal: a full RFC 5322 parser is not the point, and the
+/// legacy system accepted anything with an @ in it.
+///
+/// Shared by job contacts and user accounts so the two cannot drift: an
+/// address good enough to invite someone with must be good enough to record
+/// as a site contact.
+#[must_use]
+pub fn looks_like_email(s: &str) -> bool {
+    let s = s.trim();
+    // Whitespace anywhere is invalid, including in the local part -- an earlier
+    // version only checked the domain and accepted "a b@c.com".
+    if s.chars().any(char::is_whitespace) {
+        return false;
+    }
+    match s.split_once('@') {
+        Some((local, domain)) => {
+            !local.is_empty()
+                && domain.contains('.')
+                && !domain.starts_with('.')
+                && !domain.ends_with('.')
+                && !domain.contains('@')
+        }
+        None => false,
+    }
+}
+
+pub mod accounts;
+
 #[cfg(test)]
 mod tests {
     use super::*;

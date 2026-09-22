@@ -29,6 +29,7 @@ struct Row {
     billing_onboarding_completed: bool,
     billing_trial_ends_at: Option<chrono::DateTime<chrono::Utc>>,
     stripe_subscription_id: Option<String>,
+    billing_seat_quantity: Option<i32>,
 }
 
 #[async_trait]
@@ -38,7 +39,8 @@ impl BillingRepository for PgBillingRepository {
         // session, before the tenant GUC is set. Goes through the scoped
         // SECURITY DEFINER function from migration 0006.
         let row: Option<Row> = sqlx::query_as(
-            "SELECT billing_onboarding_completed, billing_trial_ends_at, stripe_subscription_id \
+            "SELECT billing_onboarding_completed, billing_trial_ends_at, \
+                    stripe_subscription_id, billing_seat_quantity \
              FROM auth_company_entitlement($1)",
         )
         .bind(company.get())
@@ -52,6 +54,7 @@ impl BillingRepository for PgBillingRepository {
                 can_access_application: false,
                 can_configure_account: false,
                 onboarding_complete: false,
+                seat_limit: Some(0),
             });
         };
 
@@ -69,6 +72,9 @@ impl BillingRepository for PgBillingRepository {
             can_access_application: allowed,
             can_configure_account: allowed,
             onboarding_complete: row.billing_onboarding_completed,
+            // A null quantity means the plan does not cap seats, which is
+            // every company today: nothing has ever written this column.
+            seat_limit: row.billing_seat_quantity.map(i64::from),
         })
     }
 }

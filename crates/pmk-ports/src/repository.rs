@@ -5,6 +5,7 @@
 //! rather than a cross-tenant leak -- the structural fix for Analysis 4.3.
 
 use async_trait::async_trait;
+use pmk_domain::identity::accounts::UserInput;
 use pmk_domain::ids::UserId;
 use pmk_domain::tenant::{CompanyId, TenantScope};
 use pmk_domain::{access::Permission, User};
@@ -34,6 +35,50 @@ pub trait UserRepository: Send + Sync {
     async fn permissions_for(&self, scope: TenantScope, id: UserId) -> PortResult<Vec<Permission>>;
 
     async fn list(&self, scope: TenantScope) -> PortResult<Vec<User>>;
+
+    /// One user within the caller's tenant.
+    async fn find(&self, scope: TenantScope, id: UserId) -> PortResult<Option<User>>;
+
+    /// Active users, for seat accounting.
+    async fn active_count(&self, scope: TenantScope) -> PortResult<i64>;
+
+    async fn create(
+        &self,
+        scope: TenantScope,
+        input: &UserInput,
+        password_hash: &str,
+    ) -> PortResult<User>;
+
+    /// `password_hash` of `None` leaves the existing one alone.
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: UserId,
+        input: &UserInput,
+        password_hash: Option<&str>,
+    ) -> PortResult<Option<User>>;
+
+    async fn delete(&self, scope: TenantScope, id: UserId) -> PortResult<bool>;
+
+    /// Replaces a user's stored permissions wholesale.
+    async fn set_permissions(
+        &self,
+        scope: TenantScope,
+        id: UserId,
+        permissions: &[Permission],
+    ) -> PortResult<()>;
+
+    /// Stores a manager-issued recovery code, invalidating any outstanding one.
+    ///
+    /// Only the hash is stored: a manager who can read the table must not be
+    /// able to replay a code they did not issue.
+    async fn issue_recovery_code(
+        &self,
+        scope: TenantScope,
+        id: UserId,
+        token_hash: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> PortResult<()>;
 }
 
 /// Refresh-token family, for rotation with reuse detection.
@@ -76,6 +121,11 @@ pub struct Entitlement {
     pub can_access_application: bool,
     pub can_configure_account: bool,
     pub onboarding_complete: bool,
+    /// Paid seats, or `None` when the plan does not cap them.
+    ///
+    /// Read from `companies.billing_seat_quantity`, which exists and is
+    /// populated regardless of whether Stripe is wired up.
+    pub seat_limit: Option<i64>,
 }
 
 impl Entitlement {
@@ -87,6 +137,7 @@ impl Entitlement {
             can_access_application: true,
             can_configure_account: true,
             onboarding_complete: true,
+            seat_limit: None,
         }
     }
 }

@@ -44,7 +44,9 @@ impl From<&pmk_domain::User> for UserDto {
     }
 }
 
-#[derive(Debug, Serialize)]
+// Deserialize as well: the admin screen sends this shape back when a manager
+// edits someone's access.
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionDto {
     pub resource: String,
@@ -53,6 +55,16 @@ pub struct PermissionDto {
 
 impl From<Permission> for PermissionDto {
     fn from(p: Permission) -> Self {
+        Self {
+            resource: p.resource,
+            action: p.action,
+        }
+    }
+}
+
+/// The admin screen sends permissions back in the same shape it received them.
+impl From<PermissionDto> for Permission {
+    fn from(p: PermissionDto) -> Self {
         Self {
             resource: p.resource,
             action: p.action,

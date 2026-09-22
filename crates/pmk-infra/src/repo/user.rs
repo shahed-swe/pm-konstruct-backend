@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use pmk_domain::access::{Permission, Role};
+use pmk_domain::identity::accounts::UserInput;
 use pmk_domain::ids::UserId;
 use pmk_domain::tenant::{CompanyId, TenantScope};
 use pmk_domain::User;
@@ -154,6 +155,174 @@ impl UserRepository for PgUserRepository {
             .map_err(map_sqlx)?;
         tx.commit().await.map_err(map_sqlx)?;
         rows.into_iter().map(UserRow::into_domain).collect()
+    }
+
+    async fn find(&self, scope: TenantScope, id: UserId) -> PortResult<Option<User>> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        let sql = format!("SELECT {USER_COLUMNS} FROM users WHERE id = $1");
+        let row: Option<UserRow> = sqlx::query_as(&sql)
+            .bind(id.get())
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        row.map(UserRow::into_domain).transpose()
+    }
+
+    async fn active_count(&self, scope: TenantScope) -> PortResult<i64> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        let n: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE active")
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(n)
+    }
+
+    async fn create(
+        &self,
+        scope: TenantScope,
+        input: &UserInput,
+        password_hash: &str,
+    ) -> PortResult<User> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        // `company_id` is written explicitly rather than defaulted: the RLS
+        // policy checks it, and a mismatch should fail loudly here rather than
+        // create a row nobody can see.
+        let sql = format!(
+            "INSERT INTO users (company_id, name, email, role, phone, active, password_hash) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING {USER_COLUMNS}"
+        );
+        let row: UserRow = sqlx::query_as(&sql)
+            .bind(scope.company_id().get())
+            .bind(input.name.trim())
+            .bind(input.normalised_email())
+            .bind(input.role.as_str())
+            .bind(input.phone.as_deref())
+            .bind(input.active)
+            .bind(password_hash)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        row.into_domain()
+    }
+
+    async fn update(
+        &self,
+        scope: TenantScope,
+        id: UserId,
+        input: &UserInput,
+        password_hash: Option<&str>,
+    ) -> PortResult<Option<User>> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        // `password_changed_at` moves only when the hash does, so it stays an
+        // accurate record of when the credential last changed.
+        let sql = format!(
+            "UPDATE users SET name = $2, email = $3, role = $4, phone = $5, active = $6, \
+                    password_hash = COALESCE($7, password_hash), \
+                    password_changed_at = CASE WHEN $7::text IS NULL \
+                        THEN password_changed_at ELSE NOW() END \
+             WHERE id = $1 RETURNING {USER_COLUMNS}"
+        );
+        let row: Option<UserRow> = sqlx::query_as(&sql)
+            .bind(id.get())
+            .bind(input.name.trim())
+            .bind(input.normalised_email())
+            .bind(input.role.as_str())
+            .bind(input.phone.as_deref())
+            .bind(input.active)
+            .bind(password_hash)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        row.map(UserRow::into_domain).transpose()
+    }
+
+    async fn delete(&self, scope: TenantScope, id: UserId) -> PortResult<bool> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        let n = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(id.get())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx)?
+            .rows_affected();
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(n > 0)
+    }
+
+    async fn set_permissions(
+        &self,
+        scope: TenantScope,
+        id: UserId,
+        permissions: &[Permission],
+    ) -> PortResult<()> {
+        let resources: Vec<String> = permissions.iter().map(|p| p.resource.clone()).collect();
+        let actions: Vec<String> = permissions.iter().map(|p| p.action.clone()).collect();
+
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        // Replace, not merge, and in one transaction: a manager who removes a
+        // grant must not see it survive because the insert half failed.
+        sqlx::query("DELETE FROM user_permissions WHERE user_id = $1")
+            .bind(id.get())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx)?;
+        if !permissions.is_empty() {
+            sqlx::query(
+                "INSERT INTO user_permissions (user_id, resource, action) \
+                 SELECT $1, * FROM unnest($2::text[], $3::text[]) \
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind(id.get())
+            .bind(&resources)
+            .bind(&actions)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx)?;
+        }
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(())
+    }
+
+    async fn issue_recovery_code(
+        &self,
+        scope: TenantScope,
+        id: UserId,
+        token_hash: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> PortResult<()> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
+        set_tenant(&mut tx, scope).await.map_err(map_sqlx)?;
+        // Any outstanding code is spent first, so issuing a new one cannot
+        // leave two valid codes in circulation.
+        sqlx::query(
+            "UPDATE password_reset_tokens SET used_at = NOW() \
+             WHERE user_id = $1 AND used_at IS NULL",
+        )
+        .bind(id.get())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+
+        sqlx::query(
+            "INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1,$2,$3)",
+        )
+        .bind(id.get())
+        .bind(token_hash)
+        .bind(expires_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(())
     }
 }
 

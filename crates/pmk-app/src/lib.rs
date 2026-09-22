@@ -18,5 +18,6 @@ pub mod notifications;
 pub mod progress;
 pub mod reports;
 pub mod scheduler;
+pub mod users;
 
 pub use error::{AppError, AppResult};

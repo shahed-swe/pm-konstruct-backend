@@ -85,7 +85,7 @@ impl JobInput {
             ("contact2Email", &self.contact2_email),
         ] {
             if let Some(e) = value {
-                if !e.trim().is_empty() && !looks_like_email(e) {
+                if !e.trim().is_empty() && !crate::identity::looks_like_email(e) {
                     return Err(DomainError::invalid(field, "must be an email address"));
                 }
             }
@@ -109,27 +109,6 @@ impl JobInput {
         self.client = self.client.trim().to_string();
         self.address = self.address.trim().to_string();
         self
-    }
-}
-
-/// Deliberately minimal: a full RFC 5322 parser is not the point, and the
-/// legacy system accepted anything with an @ in it.
-fn looks_like_email(s: &str) -> bool {
-    let s = s.trim();
-    // Whitespace anywhere is invalid, including in the local part -- an earlier
-    // version only checked the domain and accepted "a b@c.com".
-    if s.chars().any(char::is_whitespace) {
-        return false;
-    }
-    match s.split_once('@') {
-        Some((local, domain)) => {
-            !local.is_empty()
-                && domain.contains('.')
-                && !domain.starts_with('.')
-                && !domain.ends_with('.')
-                && !domain.contains('@')
-        }
-        None => false,
     }
 }
 
