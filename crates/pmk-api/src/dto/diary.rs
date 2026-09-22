@@ -8,20 +8,7 @@ use pmk_domain::ids::UserId;
 use pmk_domain::DomainError;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WeatherStampDto {
-    pub location_name: Option<String>,
-    pub location_lat: Option<rust_decimal::Decimal>,
-    pub location_lng: Option<rust_decimal::Decimal>,
-    pub temperature: Option<rust_decimal::Decimal>,
-    pub weather_condition: Option<String>,
-    pub weather_icon: Option<String>,
-    pub wind_speed_kmh: Option<rust_decimal::Decimal>,
-    pub rainfall_mm: Option<rust_decimal::Decimal>,
-    pub sunrise_time: Option<String>,
-    pub sunset_time: Option<String>,
-}
+use crate::dto::weather::WeatherDto;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,8 +31,14 @@ pub struct DiaryEntryDto {
     pub notes: Option<String>,
     pub action_status: Option<String>,
     pub action_raised_by: Option<i32>,
+    /// Flattened onto the entry, the way the legacy sent it.
+    ///
+    /// The legacy read these through drizzle's `numeric`, which hands back
+    /// strings, so its own reports service `parseFloat`ed every reading. We
+    /// send the same numbers `/weather` sends, so a temperature has one type
+    /// wherever it appears.
     #[serde(flatten)]
-    pub weather_stamp: WeatherStampDto,
+    pub weather_stamp: WeatherDto,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -71,18 +64,7 @@ impl From<DiaryEntry> for DiaryEntryDto {
             notes: e.notes,
             action_status: e.action_status.map(|s| s.as_str().to_string()),
             action_raised_by: e.action_raised_by.map(UserId::get),
-            weather_stamp: WeatherStampDto {
-                location_name: e.weather_stamp.location_name,
-                location_lat: e.weather_stamp.location_lat,
-                location_lng: e.weather_stamp.location_lng,
-                temperature: e.weather_stamp.temperature,
-                weather_condition: e.weather_stamp.weather_condition,
-                weather_icon: e.weather_stamp.weather_icon,
-                wind_speed_kmh: e.weather_stamp.wind_speed_kmh,
-                rainfall_mm: e.weather_stamp.rainfall_mm,
-                sunrise_time: e.weather_stamp.sunrise_time,
-                sunset_time: e.weather_stamp.sunset_time,
-            },
+            weather_stamp: WeatherDto::from(e.weather_stamp),
             created_at: e.created_at,
             updated_at: e.updated_at,
         }

@@ -32,3 +32,7 @@ figment.workspace = true
 tracing-subscriber.workspace = true
 sqlx.workspace = true
 rust_decimal.workspace = true
+
+[dev-dependencies]
+# The wire-format tests assert what serde actually emits.
+serde_json.workspace = true
