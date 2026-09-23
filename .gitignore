@@ -1,0 +1,11 @@
+# Build output. The workspace target/ is several GB.
+/target/
+
+# Local configuration. `pmk.toml` is read at startup and holds secrets.
+pmk.toml
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
