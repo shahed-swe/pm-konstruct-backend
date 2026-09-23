@@ -741,12 +741,18 @@ pub trait MediaRepository: Send + Sync {
     /// object costs storage; an orphaned row shows the user a broken image.
     async fn delete(&self, scope: TenantScope, id: MediaId, job_media: bool) -> PortResult<bool>;
 
-    /// Objects awaiting deletion, oldest first.
+    /// Object keys awaiting deletion, oldest first.
+    ///
+    /// Keys, not stored names: the object lives at
+    /// `{company}/{entity}/{entity_id}/{stored_name}`. Handing the sweeper a
+    /// bare filename makes it delete a key that never existed, which storage
+    /// reports as success -- so the queue drains and the object stays for
+    /// ever. See migration 0015.
     async fn pending_deletions(&self, limit: i64) -> PortResult<Vec<String>>;
 
-    async fn mark_deleted(&self, stored_name: &str) -> PortResult<()>;
+    async fn mark_deleted(&self, object_key: &str) -> PortResult<()>;
 
-    async fn mark_deletion_failed(&self, stored_name: &str, error: &str) -> PortResult<()>;
+    async fn mark_deletion_failed(&self, object_key: &str, error: &str) -> PortResult<()>;
 
     /// The job's Files tab: uploaded documents plus inspection drafts.
     async fn job_files(&self, scope: TenantScope, job: JobId) -> PortResult<Vec<JobFile>>;

@@ -2833,6 +2833,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "apalis",
+ "async-trait",
  "pmk-app",
  "pmk-domain",
  "pmk-infra",

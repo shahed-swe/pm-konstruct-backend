@@ -12,6 +12,7 @@ pub mod job;
 pub mod job_link;
 pub mod job_task;
 pub mod media;
+mod media_queue;
 pub mod notifications;
 pub mod progress;
 pub mod refresh_token;

@@ -15,6 +15,7 @@ pmk-ports = { path = "../pmk-ports" }
 pmk-app = { path = "../pmk-app" }
 pmk-infra = { path = "../pmk-infra" }
 tokio.workspace = true
+async-trait.workspace = true
 apalis.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

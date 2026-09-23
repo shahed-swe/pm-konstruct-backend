@@ -9,7 +9,7 @@
 
 use async_trait::async_trait;
 use pmk_domain::ids::{DiaryEntryId, DiaryNoteId, JobId, MediaId, UserId};
-use pmk_domain::media::FileType;
+use pmk_domain::media::{object_key, FileType};
 use pmk_domain::tenant::TenantScope;
 use pmk_ports::repository::{
     BulkDeletePlan, JobFile, Media, MediaOwner, MediaRecord, MediaRepository, MediaSelection,
@@ -112,27 +112,34 @@ impl PgMediaRepository {
         Ok(tx)
     }
 
-    /// Queues an object for removal from storage.
+    /// Queues objects for removal from storage.
+    ///
+    /// Takes **object keys**, not stored names. The object lives at
+    /// `{company}/{entity}/{entity_id}/{stored_name}`, and queueing the bare
+    /// filename asks storage to delete a key that has never existed -- which
+    /// it reports as success, so the queue drains and the object stays.
+    /// See migration 0015.
     ///
     /// Runs in the same transaction as the row delete, so a committed delete
-    /// always has a corresponding sweep entry. `ON CONFLICT DO NOTHING` because
-    /// `uq_media_deletion_queue_stored_name` is unique and a re-delete is not
-    /// an error.
-    async fn enqueue_deletion(
+    /// always has a corresponding sweep entry.
+    async fn enqueue_deletions(
         tx: &mut Transaction<'_, Postgres>,
-        stored_name: &str,
+        object_keys: &[String],
     ) -> PortResult<()> {
+        if object_keys.is_empty() {
+            return Ok(());
+        }
         // `ON CONFLICT DO NOTHING` without a conflict target, deliberately.
-        // Naming the target (`ON CONFLICT (stored_name)`) makes Postgres
+        // Naming the target (`ON CONFLICT (object_key)`) makes Postgres
         // inspect the conflicting row, which requires SELECT on the table --
         // and granting the API SELECT here would let it enumerate every
         // tenant's object names. The untargeted form needs only INSERT and
         // swallows the duplicate just the same.
         sqlx::query(
-            "INSERT INTO media_deletion_queue (stored_name) VALUES ($1) \
-             ON CONFLICT DO NOTHING",
+            "INSERT INTO media_deletion_queue (object_key) \
+             SELECT unnest($1::text[]) ON CONFLICT DO NOTHING",
         )
-        .bind(stored_name)
+        .bind(object_keys)
         .execute(&mut **tx)
         .await
         .map_err(map_sqlx)?;
@@ -265,33 +272,40 @@ impl MediaRepository for PgMediaRepository {
             "diary_media"
         };
 
-        // RETURNING gives the stored name so the object can be queued in the
-        // same transaction; a separate SELECT would race with a concurrent
-        // delete and could leave the object orphaned in storage.
-        let deleted: Option<(String,)> = sqlx::query_as(&format!(
-            "DELETE FROM {table} WHERE id = $1 RETURNING stored_name"
+        // RETURNING gives the stored name and the owner id, so the object key
+        // can be built and queued in the same transaction; a separate SELECT
+        // would race with a concurrent delete and could leave the object
+        // orphaned in storage.
+        let (owner_column, entity) = if job_media {
+            ("job_id", "job")
+        } else {
+            ("diary_entry_id", "diary")
+        };
+        let deleted: Option<(String, i32)> = sqlx::query_as(&format!(
+            "DELETE FROM {table} WHERE id = $1 RETURNING stored_name, {owner_column}"
         ))
         .bind(id.get())
         .fetch_optional(&mut *tx)
         .await
         .map_err(map_sqlx)?;
 
-        let Some((stored_name,)) = deleted else {
+        let Some((stored_name, owner_id)) = deleted else {
             tx.commit().await.map_err(map_sqlx)?;
             return Ok(false);
         };
 
-        Self::enqueue_deletion(&mut tx, &stored_name).await?;
+        let key = object_key(scope.company_id().get(), entity, owner_id, &stored_name);
+        Self::enqueue_deletions(&mut tx, std::slice::from_ref(&key)).await?;
         tx.commit().await.map_err(map_sqlx)?;
         Ok(true)
     }
 
     async fn pending_deletions(&self, limit: i64) -> PortResult<Vec<String>> {
         // Runs in the worker, which is cross-tenant by design: the queue keys
-        // on stored_name alone and has no tenant column. RLS denies pmk_app
+        // on the object key alone and has no tenant column. RLS denies pmk_app
         // this table entirely (migration 0004).
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT stored_name FROM media_deletion_queue \
+            "SELECT object_key FROM media_deletion_queue \
              WHERE attempts < 10 ORDER BY created_at LIMIT $1",
         )
         .bind(limit)
@@ -301,9 +315,9 @@ impl MediaRepository for PgMediaRepository {
         Ok(rows.into_iter().map(|(n,)| n).collect())
     }
 
-    async fn mark_deleted(&self, stored_name: &str) -> PortResult<()> {
-        sqlx::query("DELETE FROM media_deletion_queue WHERE stored_name = $1")
-            .bind(stored_name)
+    async fn mark_deleted(&self, object_key: &str) -> PortResult<()> {
+        sqlx::query("DELETE FROM media_deletion_queue WHERE object_key = $1")
+            .bind(object_key)
             .execute(&self.pool)
             .await
             .map_err(map_sqlx)?;
@@ -383,7 +397,7 @@ impl MediaRepository for PgMediaRepository {
         // FOR UPDATE: two people clearing the same gallery must not both see
         // the rows and both try to delete them.
         let job_rows = sqlx::query(
-            "SELECT id, stored_name, uploaded_by FROM job_media \
+            "SELECT id, stored_name, uploaded_by, job_id FROM job_media \
              WHERE job_id = $1 AND id = ANY($2) FOR UPDATE",
         )
         .bind(job.get())
@@ -395,7 +409,7 @@ impl MediaRepository for PgMediaRepository {
         // Diary media reaches the job through its entry, so the join is what
         // stops an id from another job being deleted by guessing.
         let diary_rows = sqlx::query(
-            "SELECT dm.id, dm.stored_name, dm.uploaded_by FROM diary_media dm \
+            "SELECT dm.id, dm.stored_name, dm.uploaded_by, dm.diary_entry_id FROM diary_media dm \
              JOIN site_diary sd ON sd.id = dm.diary_entry_id \
              WHERE sd.job_id = $1 AND dm.id = ANY($2) FOR UPDATE",
         )
@@ -445,12 +459,22 @@ impl MediaRepository for PgMediaRepository {
             return Ok(plan);
         }
 
-        let mut names: Vec<String> = Vec::with_capacity(selections.len());
+        // Object keys, not stored names: the object lives under a
+        // company/entity prefix and the bare filename names nothing.
+        let company = scope.company_id().get();
+        let mut keys: Vec<String> = Vec::with_capacity(selections.len());
         for r in &job_rows {
-            names.push(r.get("stored_name"));
+            let stored: String = r.get("stored_name");
+            keys.push(object_key(company, "job", r.get("job_id"), &stored));
         }
         for r in &diary_rows {
-            names.push(r.get("stored_name"));
+            let stored: String = r.get("stored_name");
+            keys.push(object_key(
+                company,
+                "diary",
+                r.get("diary_entry_id"),
+                &stored,
+            ));
         }
 
         if !job_ids.is_empty() {
@@ -475,29 +499,22 @@ impl MediaRepository for PgMediaRepository {
 
         // Queued in the same transaction as the deletes, so a commit always
         // leaves the objects reachable by the sweeper.
-        sqlx::query(
-            "INSERT INTO media_deletion_queue (stored_name) \
-             SELECT unnest($1::text[]) ON CONFLICT DO NOTHING",
-        )
-        .bind(&names)
-        .execute(&mut *tx)
-        .await
-        .map_err(map_sqlx)?;
+        Self::enqueue_deletions(&mut tx, &keys).await?;
 
         tx.commit().await.map_err(map_sqlx)?;
         plan.deleted = selections.to_vec();
         Ok(plan)
     }
 
-    async fn mark_deletion_failed(&self, stored_name: &str, error: &str) -> PortResult<()> {
+    async fn mark_deletion_failed(&self, object_key: &str, error: &str) -> PortResult<()> {
         // Attempts are capped at 10 by `pending_deletions`, so a permanently
         // failing object stops being retried but stays visible for triage.
         sqlx::query(
             "UPDATE media_deletion_queue \
              SET attempts = attempts + 1, last_error = $2, last_attempt_at = NOW() \
-             WHERE stored_name = $1",
+             WHERE object_key = $1",
         )
-        .bind(stored_name)
+        .bind(object_key)
         .bind(error)
         .execute(&self.pool)
         .await

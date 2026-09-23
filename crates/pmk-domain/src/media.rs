@@ -375,6 +375,43 @@ pub fn may_delete_media(
 
 #[cfg(test)]
 mod tests {
+    /// The bug migration 0015 fixes, as a test.
+    ///
+    /// The deletion queue used to hold `stored_name`, and the worker asked
+    /// storage to delete that. Storage answers a delete of a key that does
+    /// not exist with success, so the queue drained, the worker logged a
+    /// successful sweep, and every deleted photo stayed in the bucket for
+    /// ever. Nothing failed; the objects simply accumulated.
+    ///
+    /// This asserts the one property that would have caught it: the key is
+    /// not the file name.
+    #[test]
+    fn a_key_is_never_just_the_stored_name() {
+        let stored = "9f8e7d6c-1234-4abc-9def-000000000000.jpg";
+        let key = object_key(3, "job", 17, stored);
+
+        assert_ne!(
+            key, stored,
+            "queueing the bare stored_name deletes a key that does not exist, \
+             and storage calls that success"
+        );
+        assert_eq!(key, "3/job/17/9f8e7d6c-1234-4abc-9def-000000000000.jpg");
+        assert!(
+            key.ends_with(stored),
+            "the stored name is still the last segment"
+        );
+    }
+
+    #[test]
+    fn the_same_file_under_two_owners_is_two_keys() {
+        // `stored_name` is a UUID, so this cannot happen by accident -- but
+        // the queue is keyed on the object key, and two owners sharing one
+        // key would mean deleting one entry's photo removed another's.
+        let job = object_key(1, "job", 5, "x.jpg");
+        let diary = object_key(1, "diary", 5, "x.jpg");
+        assert_ne!(job, diary);
+    }
+
     use super::*;
 
     use crate::access::Role;

@@ -409,6 +409,10 @@ impl DiaryRepository for PgDiaryRepository {
 
     async fn delete(&self, scope: TenantScope, id: DiaryEntryId) -> PortResult<bool> {
         let mut tx = self.begin(scope).await?;
+        // The entry's media cascades away with it, so the objects have to be
+        // queued while their rows still exist.
+        super::media_queue::enqueue_diary_entry_media(&mut tx, scope.company_id().get(), id.get())
+            .await?;
         let r = sqlx::query("DELETE FROM site_diary WHERE id = $1")
             .bind(id.get())
             .execute(&mut *tx)
@@ -577,7 +581,10 @@ impl DiaryRepository for PgDiaryRepository {
 
     async fn delete_note(&self, scope: TenantScope, note: DiaryNoteId) -> PortResult<bool> {
         let mut tx = self.begin(scope).await?;
-        // Comments and media cascade from the note's foreign keys.
+        // Comments and media cascade from the note's foreign keys -- so the
+        // objects must be queued first, while `diary_media` still names them.
+        super::media_queue::enqueue_note_media(&mut tx, scope.company_id().get(), note.get())
+            .await?;
         let r = sqlx::query("DELETE FROM diary_notes WHERE id = $1")
             .bind(note.get())
             .execute(&mut *tx)

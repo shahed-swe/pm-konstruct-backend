@@ -33,6 +33,18 @@ enum Command {
         #[arg(long, default_value = "dev")]
         profile: String,
     },
+    /// Give the `pmk_app` role a password so the API can log in as it.
+    ///
+    /// Migration 0004 creates the role NOLOGIN, deliberately: a password does
+    /// not belong in a file that is committed. This is how a deployment
+    /// supplies one, and it is safe to re-run -- it sets the password to
+    /// whatever is passed, which is also how the password is rotated.
+    GrantAppLogin {
+        /// Defaults to `PMK_APP_ROLE_PASSWORD`, so it need not appear in the
+        /// process list.
+        #[arg(long)]
+        password: Option<String>,
+    },
     /// Hash a password with the current algorithm (Argon2id).
     HashPassword { password: String },
     /// Print the effective configuration, with secrets redacted.
@@ -113,9 +125,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let n = seed(&pool, &profile).await?;
             println!("Seed profile '{profile}' applied ({n} statement groups).");
         }
+        Command::GrantAppLogin { password } => {
+            let password = password
+                .or_else(|| std::env::var("PMK_APP_ROLE_PASSWORD").ok())
+                .filter(|p| !p.trim().is_empty())
+                .ok_or("no password given: pass --password or set PMK_APP_ROLE_PASSWORD")?;
+            if password.len() < 16 {
+                return Err(format!(
+                    "the pmk_app password must be at least 16 characters, got {}. \
+                     It is never typed by a person, so make it long.",
+                    password.len()
+                )
+                .into());
+            }
+            grant_app_login(&pool, &password).await?;
+            println!("pmk_app may now log in.");
+        }
         Command::HashPassword { .. } | Command::ShowConfig => unreachable!("handled above"),
     }
     Ok(())
+}
+
+/// Sets the `pmk_app` password and lets it connect.
+///
+/// The password goes in as a bind parameter and is interpolated by Postgres
+/// itself with `%L`, because `ALTER ROLE ... PASSWORD` takes no parameters and
+/// building that statement in Rust would mean quoting a secret by hand. It is
+/// transaction-local (`set_config(..., true)`), so it is gone at commit and
+/// never reaches `pg_settings` for another session to read.
+async fn grant_app_login(pool: &sqlx::PgPool, password: &str) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT set_config('pmk.app_password', $1, true)")
+        .bind(password)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "DO $grant$
+         BEGIN
+           EXECUTE format('ALTER ROLE pmk_app LOGIN PASSWORD %L',
+                          current_setting('pmk.app_password'));
+           EXECUTE format('GRANT CONNECT ON DATABASE %I TO pmk_app',
+                          current_database());
+         END
+         $grant$",
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
 }
 
 async fn applied_versions(pool: &sqlx::PgPool) -> Result<Vec<i64>, sqlx::Error> {
@@ -355,6 +411,33 @@ async fn seed(pool: &sqlx::PgPool, profile: &str) -> Result<usize, Box<dyn std::
     .execute(&mut *tx)
     .await?;
 
+    // Notes on entry 204, because the diary list shows the first note as the
+    // row's title -- an entry with none renders as "Diary entry", which is
+    // what the legacy did and is indistinguishable from the feature being
+    // broken. Without a seeded note, `firstNote` and `noteCount` are
+    // unreachable on a fresh database.
+    //
+    // Three categories and one raised action, so the category filter and the
+    // action panel both have something real; `sort_order` is what decides
+    // which one is "first", and 0 is deliberately not the lowest id.
+    sqlx::query(
+        "INSERT INTO diary_notes
+           (id, diary_entry_id, category, content, action_status, action_raised_by, sort_order)
+         VALUES
+           (301, 204, 'general',         'Framing to level 2 complete.',            NULL,     NULL, 0),
+           (302, 204, 'trades',          'Sparky on site from Tuesday.',            NULL,     NULL, 1),
+           (303, 204, 'issues',          'Scaffold tie missing on the east face.', 'action',  2,    2),
+           (304, 201, 'site_conditions', 'Site closed, water across the pad.',      NULL,     NULL, 0)
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "SELECT setval('diary_notes_id_seq', GREATEST((SELECT MAX(id) FROM diary_notes), 1))",
+    )
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
-    Ok(7)
+    Ok(8)
 }

@@ -166,31 +166,45 @@ impl PgFormsRepository {
     /// matching queue entry and no object is orphaned in storage.
     async fn detach_media(
         tx: &mut Transaction<'_, Postgres>,
+        company_id: i32,
         media_ids: &[i32],
     ) -> PortResult<Vec<String>> {
         if media_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let names: Vec<String> =
-            sqlx::query_scalar("DELETE FROM diary_media WHERE id = ANY($1) RETURNING stored_name")
-                .bind(media_ids)
-                .fetch_all(&mut **tx)
-                .await
-                .map_err(map_sqlx)?;
-        if !names.is_empty() {
+        // The entry id comes back with the name because the object lives
+        // under `{company}/diary/{entry}/`, and the bare filename names
+        // nothing in the bucket -- see migration 0015.
+        let rows: Vec<(String, i32)> = sqlx::query_as(
+            "DELETE FROM diary_media WHERE id = ANY($1) \
+             RETURNING stored_name, diary_entry_id",
+        )
+        .bind(media_ids)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(map_sqlx)?;
+
+        let keys: Vec<String> = rows
+            .iter()
+            .map(|(stored, entry)| {
+                pmk_domain::media::object_key(company_id, "diary", *entry, stored)
+            })
+            .collect();
+
+        if !keys.is_empty() {
             // Untargeted ON CONFLICT: naming the target would make Postgres
             // read the conflicting row, which needs SELECT on a table the API
             // role is deliberately denied.
             sqlx::query(
-                "INSERT INTO media_deletion_queue (stored_name) \
+                "INSERT INTO media_deletion_queue (object_key) \
                  SELECT unnest($1::text[]) ON CONFLICT DO NOTHING",
             )
-            .bind(&names)
+            .bind(&keys)
             .execute(&mut **tx)
             .await
             .map_err(map_sqlx)?;
         }
-        Ok(names)
+        Ok(rows.into_iter().map(|(stored, _)| stored).collect())
     }
 }
 
@@ -466,7 +480,7 @@ impl FormsRepository for PgFormsRepository {
         .fetch_all(&mut *tx)
         .await
         .map_err(map_sqlx)?;
-        Self::detach_media(&mut tx, &orphaned).await?;
+        Self::detach_media(&mut tx, scope.company_id().get(), &orphaned).await?;
 
         sqlx::query(
             "DELETE FROM inspection_form_items WHERE form_id = $1 AND NOT (client_key = ANY($2))",
@@ -648,7 +662,7 @@ impl FormsRepository for PgFormsRepository {
         };
 
         // Deleting the diary_media row cascades to inspection_form_media.
-        Self::detach_media(&mut tx, &[media_id]).await?;
+        Self::detach_media(&mut tx, scope.company_id().get(), &[media_id]).await?;
 
         let saved = Self::load(&mut tx, id, user).await?;
         tx.commit().await.map_err(map_sqlx)?;

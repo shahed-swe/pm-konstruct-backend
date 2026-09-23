@@ -357,6 +357,13 @@ impl JobRepository for PgJobRepository {
 
     async fn purge(&self, scope: TenantScope, id: JobId) -> PortResult<bool> {
         let mut tx = self.begin(scope).await?;
+        // Before the delete, not after: the cascade takes the media rows with
+        // it, and their `stored_name`s are the only record of what is in
+        // storage. Skipping this leaves every photo on the job orphaned in the
+        // bucket -- nothing points at them, so nothing ever deletes them.
+        let queued =
+            super::media_queue::enqueue_job_media(&mut tx, scope.company_id().get(), id.get())
+                .await?;
         // ON DELETE CASCADE reaches diary entries, notes, comments, media,
         // call-forward items, tasks, links and scheduler allocations. One job
         // can anchor years of site diary, which is why this is not the default.
@@ -366,6 +373,13 @@ impl JobRepository for PgJobRepository {
             .await
             .map_err(map_sqlx)?;
         tx.commit().await.map_err(map_sqlx)?;
+        if r.rows_affected() > 0 && queued > 0 {
+            tracing::info!(
+                job = id.get(),
+                objects = queued,
+                "purge queued media for deletion"
+            );
+        }
         Ok(r.rows_affected() > 0)
     }
 
